@@ -74,20 +74,17 @@ CubicSpline<xIter, yIter>::CubicSpline(xIter xS, xIter xF, yIter yS,
     constexpr auto oneSixth =
         static_cast<x_value_type>(1) / static_cast<x_value_type>(6);
 
-    // Add in the upper diagonal.
-    if (left == CubicSplineBC::Clamped) {
-        A.insert(0, 1) = oneSixth * (_xS[1] - _xS[0]);
-    }
-    for (int i = 1; i < n - 1; ++i) {
-        A.insert(i, i + 1) = oneSixth * (_xS[i] - _xS[i - 1]);
-    }
-
-    // Add in the lower diagonal.
-    for (int i = 0; i < n - 2; ++i) {
-        A.insert(i + 1, i) = oneSixth * (_xS[i + 1] - _xS[i]);
-    }
-    if (right == CubicSplineBC::Clamped) {
-        A.insert(n - 1, n - 2) = oneSixth * (_xS[n - 1] - _xS[n - 2]);
+    // Store only the lower triangle consumed by SimplicialLDLT. A Free
+    // endpoint fixes its second derivative to zero, so the adjacent term can
+    // be eliminated from the neighbouring equation. Omitting that edge makes
+    // the full-size system symmetric without changing its solution.
+    for (int i = 0; i < n - 1; ++i) {
+        const bool adjacentToFreeLeft = i == 0 && left == CubicSplineBC::Free;
+        const bool adjacentToFreeRight =
+            i == n - 2 && right == CubicSplineBC::Free;
+        if (!adjacentToFreeLeft && !adjacentToFreeRight) {
+            A.insert(i + 1, i) = oneSixth * (_xS[i + 1] - _xS[i]);
+        }
     }
 
     // Add in the diagonal.
@@ -127,7 +124,8 @@ CubicSpline<xIter, yIter>::CubicSpline(xIter xS, xIter xF, yIter yS,
     }
 
     // Solve the linear system.
-    Eigen::SimplicialLDLT<Matrix> solver;
+    // A now stores the lower triangle of a symmetric positive-definite system.
+    Eigen::SimplicialLDLT<Matrix, Eigen::Lower> solver;
     solver.compute(A);
     _ypp = solver.solve(rhs);
     assert(solver.info() == Eigen::Success);

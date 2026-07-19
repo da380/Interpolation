@@ -112,7 +112,34 @@ Validation:
   declarations remained unchanged, generated documentation stayed under
   `/tmp`, and DSpecM1D remained unchanged.
 
+## Pull-request review corrections
+
+Status: complete in the working tree; not committed or pushed.
+
+- Added the direct standard-library includes required for `std::accumulate` in
+  the public Polynomial header and `std::pair` in the spline tests.
+- Changed the copying coefficient-vector constructor to accept a const vector.
+- Defined default construction as a degree-zero polynomial containing the
+  single coefficient `0`, eliminating the former empty state.
+- Added deterministic tests for const-vector construction and real/complex
+  zero-polynomial degree, coefficients, evaluation, calculus, access, and
+  arithmetic.
+
+Validation:
+
+- A standalone translation unit including only the public Polynomial header
+  compiled successfully and exercised const-vector and default construction.
+- Fresh default dependency and exact Eigen 3.4.0 builds compiled all examples
+  and passed all 35 registered tests.
+- Warning-strict Doxygen 1.9.8 generation succeeded in both clean build trees.
+- All 35 tests passed with libstdc++ checked iterators enabled.
+- All 35 tests passed under AddressSanitizer and UndefinedBehaviorSanitizer
+  without findings. Leak detection was disabled because LeakSanitizer cannot
+  run under the validation environment's ptrace supervision.
+- `git diff --check` passed; dependency declarations, generated documentation,
+  and DSpecM1D remained unchanged.
+
 ## Deferred issues
 
-- Audit default-constructed `Polynomial1D` behavior and duplicate interpolation
-  nodes separately; this sweep assigns neither issue new semantics.
+- Audit duplicate interpolation nodes separately; this review phase assigns
+  that issue no new semantics.

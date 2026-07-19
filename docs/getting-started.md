@@ -52,7 +52,7 @@ zero in the interpolation formulas.
 | `Akima` | At least 3 nodes | Extrapolates with the first or final cubic segment |
 | `Lagrange` | At least 1 node | Evaluates the global polynomial for any real query |
 | `LagrangePolynomial` | At least 1 node | Evaluates the selected basis polynomial for any real query |
-| `Polynomial1D` | At least 1 coefficient for degree operations | Evaluates for any supported scalar argument |
+| `Polynomial1D` | Defaults to zero; explicit input needs at least 1 coefficient | Evaluates for any supported scalar argument |
 
 ## Scalar types
 
@@ -71,6 +71,9 @@ coefficient list is ordered from the constant term upward:
 Interpolation::Polynomial1D<double> p{1.0, -2.0, 3.0};
 // p(x) = 1 - 2x + 3x^2
 ```
+
+A default-constructed `Polynomial1D` is the degree-zero polynomial with the
+single coefficient `0`.
 
 Construction and assignment from a polynomial with a convertible coefficient
 type convert each coefficient and replace the destination coefficient list.

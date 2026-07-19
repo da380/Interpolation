@@ -14,7 +14,7 @@ noted below. Eigen provides the linear algebra used by cubic splines.
 | `Akima` | Local piecewise-cubic interpolation for real or complex ordinates | 3 nodes |
 | `Lagrange` | Global polynomial interpolation of sampled values | 1 node |
 | `LagrangePolynomial` | Individual Lagrange cardinal basis functions | 1 node |
-| `Polynomial1D` | Polynomial evaluation, calculus, and arithmetic | 1 coefficient |
+| `Polynomial1D` | Polynomial evaluation, calculus, and arithmetic | Defaults to zero; otherwise 1 coefficient |
 
 All interpolators store iterators rather than copying their input. Keep the
 sample containers alive and do not reallocate them while an interpolator is in

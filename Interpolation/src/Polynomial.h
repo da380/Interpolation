@@ -5,6 +5,7 @@
 #include <initializer_list>
 #include <iostream>
 #include <iterator>
+#include <numeric>
 #include <random>
 #include <utility>
 #include <vector>
@@ -32,14 +33,11 @@ class Polynomial1D {
     /** @brief Constant coefficient iterator. */
     using const_iterator = std::vector<T>::const_iterator;
 
-    /**
-     * @brief Construct an empty sentinel polynomial.
-     * @warning Degree-dependent operations require a nonempty coefficient list.
-     */
-    Polynomial1D() = default;
+    /** @brief Construct the zero polynomial with one coefficient equal to zero. */
+    Polynomial1D() : _a{T{}} {}
 
     /** @brief Copy coefficients from a vector in ascending power order. */
-    Polynomial1D(std::vector<T> &a) : _a{a} {}
+    Polynomial1D(const std::vector<T> &a) : _a{a} {}
     /** @brief Move coefficients from a vector in ascending power order. */
     Polynomial1D(std::vector<T> &&a) : _a{std::move(a)} {}
 
@@ -125,10 +123,7 @@ class Polynomial1D {
         return Polynomial1D(a);
     }
 
-    /**
-     * @brief Return the polynomial degree.
-     * @pre The coefficient sequence is nonempty.
-     */
+    /** @brief Return the polynomial degree. */
     auto Degree() const { return _a.size() - 1; }
 
     /** @brief Evaluate the polynomial at `x` using Horner's method. */

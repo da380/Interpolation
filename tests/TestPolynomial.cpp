@@ -25,6 +25,38 @@ void ExpectCoefficients(
 
 }   // namespace
 
+TEST(Polynomial1D, DefaultConstructionIsZeroPolynomial) {
+    Interpolation::Polynomial1D<double> zero;
+
+    EXPECT_EQ(zero.Degree(), 0);
+    ExpectCoefficients(zero, std::vector<double>{0.0});
+    InterpolationTest::ExpectScaledNear(zero(2.0), 0.0);
+    InterpolationTest::ExpectScaledNear(zero.Derivative(2.0), 0.0);
+    InterpolationTest::ExpectScaledNear(zero.Primitive(2.0), 0.0);
+    InterpolationTest::ExpectScaledNear(zero.Integrate(-1.0, 2.0), 0.0);
+    InterpolationTest::ExpectScaledNear(zero[0], 0.0);
+    InterpolationTest::ExpectScaledNear(zero.polycoeff(-1), 0.0);
+    InterpolationTest::ExpectScaledNear(zero.polycoeff(1), 0.0);
+
+    const Interpolation::Polynomial1D<double> polynomial{1.0, -2.0, 3.0};
+    ExpectCoefficients(zero + polynomial,
+                       std::vector<double>{1.0, -2.0, 3.0});
+    ExpectCoefficients(zero * polynomial,
+                       std::vector<double>{0.0, 0.0, 0.0});
+    ExpectCoefficients(zero + 2.0, std::vector<double>{2.0});
+
+    const Interpolation::Polynomial1D<std::complex<double>> complexZero;
+    ExpectCoefficients(complexZero,
+                       std::vector<std::complex<double>>{{0.0, 0.0}});
+}
+
+TEST(Polynomial1D, ConstructsFromConstCoefficientVector) {
+    const std::vector<double> coefficients{1.0, -2.0, 3.0};
+    const Interpolation::Polynomial1D<double> polynomial{coefficients};
+
+    ExpectCoefficients(polynomial, coefficients);
+}
+
 TEST(Polynomial1D, EvaluationCalculusAndCoefficientAccess) {
     Interpolation::Polynomial1D<double> polynomial{1.0, -2.0, 3.0};
 

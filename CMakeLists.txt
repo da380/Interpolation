@@ -39,6 +39,7 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
     # We're in the root, define additional targets for developers.
     option(MY_PROJECT_BUILD_EXAMPLES   "whether or not examples should be built" ON)
     option(MY_PROJECT_BUILD_TESTS      "whether or not tests should be built" ON)
+    option(INTERPOLATION_BUILD_DOCS    "whether or not API documentation should be built" OFF)
 
     if(MY_PROJECT_BUILD_EXAMPLES)
         add_subdirectory(examples)
@@ -47,6 +48,18 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
         enable_testing()
         add_subdirectory(tests)
     endif()
+    if(INTERPOLATION_BUILD_DOCS)
+        find_package(Doxygen REQUIRED)
+        set(INTERPOLATION_DOXYGEN_CONFIG
+            ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile)
+        configure_file(docs/Doxyfile.in
+                       ${INTERPOLATION_DOXYGEN_CONFIG}
+                       @ONLY)
+        add_custom_target(InterpolationDocs
+            COMMAND ${DOXYGEN_EXECUTABLE} ${INTERPOLATION_DOXYGEN_CONFIG}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            COMMENT "Generating Interp API documentation"
+            VERBATIM)
+    endif()
 endif()
-
 

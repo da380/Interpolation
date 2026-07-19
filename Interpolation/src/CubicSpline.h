@@ -14,33 +14,92 @@
 
 namespace Interpolation {
 
-// Enum class for boundary condition types.
-enum class CubicSplineBC { Free, Clamped };
+/** @brief Boundary-condition types supported by CubicSpline. */
+enum class CubicSplineBC {
+    /** Natural condition: the endpoint second derivative is zero. */
+    Free,
+    /** The endpoint first derivative is supplied by the caller. */
+    Clamped
+};
 
+/**
+ * @brief Piecewise-cubic spline interpolation on ordered sample points.
+ *
+ * The object stores iterators rather than copying the samples. The referenced
+ * containers must remain alive and must not be reallocated while the spline is
+ * in use. Queries outside the sample interval use the first or final cubic
+ * segment for extrapolation.
+ *
+ * @tparam xIter Random-access iterator over real abscissae.
+ * @tparam yIter Random-access iterator over real or complex ordinates.
+ * @pre The abscissa range contains at least two strictly increasing values.
+ */
 template <typename xIter, typename yIter>
     requires InterpolationIteratorPair<xIter, yIter>
 class CubicSpline {
   public:
-    // Define some class member types
+    /** @brief Scalar type used for abscissae. */
     using x_value_type = std::iter_value_t<xIter>;
+    /** @brief Scalar type used for interpolated values. */
     using y_value_type = std::iter_value_t<yIter>;
 
-    // Default constructor.
+    /**
+     * @brief Construct an unbound spline for later assignment.
+     * @warning Evaluation is invalid until a sample-backed spline is assigned.
+     */
     CubicSpline() = default;
 
-    // General constructor.
-    CubicSpline(xIter, xIter, yIter, CubicSplineBC, y_value_type, CubicSplineBC,
-                y_value_type);
+    /**
+     * @brief Construct a spline with independently selected endpoint conditions.
+     * @param xStart Iterator to the first abscissa.
+     * @param xFinish Iterator one past the final abscissa.
+     * @param yStart Iterator to the ordinate corresponding to `xStart`.
+     * @param left Left endpoint boundary-condition type.
+     * @param leftDerivative Required first derivative when `left` is Clamped;
+     *        ignored when it is Free.
+     * @param right Right endpoint boundary-condition type.
+     * @param rightDerivative Required first derivative when `right` is Clamped;
+     *        ignored when it is Free.
+     */
+    CubicSpline(xIter xStart, xIter xFinish, yIter yStart, CubicSplineBC left,
+                y_value_type leftDerivative, CubicSplineBC right,
+                y_value_type rightDerivative);
 
-    // Constructor for natural spline.
-    CubicSpline(xIter, xIter, yIter);
+    /**
+     * @brief Construct a natural spline with Free conditions at both endpoints.
+     * @param xStart Iterator to the first abscissa.
+     * @param xFinish Iterator one past the final abscissa.
+     * @param yStart Iterator to the ordinate corresponding to `xStart`.
+     */
+    CubicSpline(xIter xStart, xIter xFinish, yIter yStart);
 
-    // Constructor when boundary conditions are the same.
-    CubicSpline(xIter, xIter, yIter, CubicSplineBC, y_value_type, y_value_type);
+    /**
+     * @brief Construct a spline using one condition type at both endpoints.
+     * @param xStart Iterator to the first abscissa.
+     * @param xFinish Iterator one past the final abscissa.
+     * @param yStart Iterator to the ordinate corresponding to `xStart`.
+     * @param both Boundary-condition type for both endpoints.
+     * @param leftDerivative Left derivative when `both` is Clamped; otherwise
+     *        ignored.
+     * @param rightDerivative Right derivative when `both` is Clamped; otherwise
+     *        ignored.
+     */
+    CubicSpline(xIter xStart, xIter xFinish, yIter yStart, CubicSplineBC both,
+                y_value_type leftDerivative, y_value_type rightDerivative);
 
-    // Evaluate interpolating function.
-    y_value_type operator()(x_value_type) const;
-    y_value_type Derivative(x_value_type) const;
+    /**
+     * @brief Evaluate the spline interpolant or its endpoint-segment extrapolation.
+     * @param x Query abscissa.
+     * @return Spline value at `x`.
+     */
+    y_value_type operator()(x_value_type x) const;
+
+    /**
+     * @brief Evaluate the first derivative of the spline.
+     * @param x Query abscissa.
+     * @return First derivative at `x`.
+     */
+    y_value_type Derivative(x_value_type x) const;
 
   private:
     using Vector = Eigen::Matrix<y_value_type, Eigen::Dynamic, 1>;
@@ -74,20 +133,17 @@ CubicSpline<xIter, yIter>::CubicSpline(xIter xS, xIter xF, yIter yS,
     constexpr auto oneSixth =
         static_cast<x_value_type>(1) / static_cast<x_value_type>(6);
 
-    // Add in the upper diagonal.
-    if (left == CubicSplineBC::Clamped) {
-        A.insert(0, 1) = oneSixth * (_xS[1] - _xS[0]);
-    }
-    for (int i = 1; i < n - 1; ++i) {
-        A.insert(i, i + 1) = oneSixth * (_xS[i] - _xS[i - 1]);
-    }
-
-    // Add in the lower diagonal.
-    for (int i = 0; i < n - 2; ++i) {
-        A.insert(i + 1, i) = oneSixth * (_xS[i + 1] - _xS[i]);
-    }
-    if (right == CubicSplineBC::Clamped) {
-        A.insert(n - 1, n - 2) = oneSixth * (_xS[n - 1] - _xS[n - 2]);
+    // Store only the lower triangle consumed by SimplicialLDLT. A Free
+    // endpoint fixes its second derivative to zero, so the adjacent term can
+    // be eliminated from the neighbouring equation. Omitting that edge makes
+    // the full-size system symmetric without changing its solution.
+    for (int i = 0; i < n - 1; ++i) {
+        const bool adjacentToFreeLeft = i == 0 && left == CubicSplineBC::Free;
+        const bool adjacentToFreeRight =
+            i == n - 2 && right == CubicSplineBC::Free;
+        if (!adjacentToFreeLeft && !adjacentToFreeRight) {
+            A.insert(i + 1, i) = oneSixth * (_xS[i + 1] - _xS[i]);
+        }
     }
 
     // Add in the diagonal.
@@ -127,7 +183,8 @@ CubicSpline<xIter, yIter>::CubicSpline(xIter xS, xIter xF, yIter yS,
     }
 
     // Solve the linear system.
-    Eigen::SimplicialLDLT<Matrix> solver;
+    // A now stores the lower triangle of a symmetric positive-definite system.
+    Eigen::SimplicialLDLT<Matrix, Eigen::Lower> solver;
     solver.compute(A);
     _ypp = solver.solve(rhs);
     assert(solver.info() == Eigen::Success);

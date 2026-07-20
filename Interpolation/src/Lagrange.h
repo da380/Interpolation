@@ -14,19 +14,42 @@
 
 namespace Interpolation {
 
+/**
+ * @brief Lagrange cardinal basis on a fixed set of nodes.
+ *
+ * The object stores an iterator to the nodes rather than copying them. The
+ * underlying container must remain alive and must not be reallocated while the
+ * basis is in use.
+ *
+ * @tparam I Random-access iterator over real floating-point nodes.
+ * @pre The range contains at least one strictly increasing node.
+ */
 template <RealFloatingPointIterator I> class LagrangePolynomial {
   public:
+    /** @brief Scalar type of the interpolation nodes. */
     using value_t = std::iter_value_t<I>;
 
-    // Constructors.
+    /** @brief Default construction is not available without a node range. */
     LagrangePolynomial() = delete;
+
+    /**
+     * @brief Construct the cardinal basis for `[start, finish)`.
+     * @param start Iterator to the first node.
+     * @param finish Iterator one past the final node.
+     */
     LagrangePolynomial(I start, I finish)
         : n{std::distance(start, finish)}, X{start} {
         assert(n > 0);
         assert(std::is_sorted(start, finish));
     }
 
-    // Evaluation of ith function at x.
+    /**
+     * @brief Evaluate one cardinal basis polynomial.
+     * @param i Zero-based basis-function index.
+     * @param x Query abscissa.
+     * @return Value of the `i`th basis polynomial at `x`.
+     * @pre `0 <= i <` the number of nodes.
+     */
     value_t operator()(int i, value_t x) const {
         auto prod1 = static_cast<value_t>(1);
         auto prod2 = static_cast<value_t>(1);
@@ -39,7 +62,13 @@ template <RealFloatingPointIterator I> class LagrangePolynomial {
         return prod1 / prod2;
     }
 
-    // Derivative function.
+    /**
+     * @brief Evaluate the derivative of one cardinal basis polynomial.
+     * @param i Zero-based basis-function index.
+     * @param x Query abscissa.
+     * @return First derivative of the `i`th basis polynomial at `x`.
+     * @pre `0 <= i <` the number of nodes.
+     */
     value_t Derivative(int i, value_t x) const {
         auto hp = static_cast<value_t>(0);
         auto prod2 = static_cast<value_t>(1);
@@ -62,22 +91,44 @@ template <RealFloatingPointIterator I> class LagrangePolynomial {
     I X;                // Iterator to the start of the nodes.
 };
 
+/**
+ * @brief Global polynomial interpolation in the Lagrange cardinal basis.
+ *
+ * The object stores iterators rather than copying its samples. Both underlying
+ * containers must remain alive and must not be reallocated while the
+ * interpolator is in use. Evaluation outside the node interval is polynomial
+ * extrapolation.
+ *
+ * @tparam xIter Random-access iterator over real abscissae.
+ * @tparam yIter Random-access iterator over real or complex ordinates.
+ * @pre The abscissa range contains at least one strictly increasing value.
+ */
 template <typename xIter, typename yIter>
     requires InterpolationIteratorPair<xIter, yIter>
 class Lagrange {
   public:
-    // Define some class member types
+    /** @brief Scalar type used for abscissae. */
     using x_value_t = std::iter_value_t<xIter>;
+    /** @brief Scalar type used for interpolated values. */
     using y_value_t = std::iter_value_t<yIter>;
 
-    // Constructors.
+    /**
+     * @brief Construct an interpolator over non-owning sample ranges.
+     * @param xS Iterator to the first abscissa.
+     * @param xF Iterator one past the final abscissa.
+     * @param yS Iterator to the ordinate corresponding to `xS`.
+     */
     Lagrange(xIter xS, xIter xF, yIter yS)
         : xS{xS}, xF{xF}, yS{yS}, h{LagrangePolynomial(xS, xF)} {}
 
-    // Return number of points
+    /** @brief Return the number of interpolation nodes. */
     auto size() const { return std::distance(xS, xF); }
 
-    // Evaluation functions
+    /**
+     * @brief Evaluate the interpolating polynomial.
+     * @param x Query abscissa.
+     * @return Interpolated or extrapolated ordinate.
+     */
     y_value_t operator()(x_value_t x) const {
         auto y = static_cast<y_value_t>(0);
         for (int i = 0; i < size(); i++) {
@@ -85,6 +136,12 @@ class Lagrange {
         }
         return y;
     }
+
+    /**
+     * @brief Evaluate the first derivative of the interpolating polynomial.
+     * @param x Query abscissa.
+     * @return First derivative at `x`.
+     */
     y_value_t Derivative(x_value_t x) const {
         auto yp = static_cast<y_value_t>(0);
         for (int i = 0; i < size(); i++) {

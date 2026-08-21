@@ -1,6 +1,6 @@
 # Interpolation
 
-Interpolation is a C++20 header-only template library for one-dimensional
+Interpolation is a C++23 header-only template library for one-dimensional
 interpolation and polynomial operations. Abscissae are real floating-point
 values; ordinates and polynomial coefficients may be real or complex where
 noted below. Eigen provides the linear algebra used by cubic splines.
@@ -22,10 +22,25 @@ use. Abscissae must be strictly increasing.
 
 ## Requirements
 
-- A C++20 compiler
-- CMake 3.5 or newer
-- Git access when CMake fetches Eigen and, for tests, GoogleTest
+- A C++23 compiler. GCC 14 and Clang 18 are the versions CI covers
+- CMake 3.24 or newer
+- Eigen. CMake uses an installed Eigen if it finds one and otherwise fetches
+  it. This dependency is being removed
+- Git access when CMake fetches Eigen or, for tests, GoogleTest
 - Doxygen 1.9 or newer only when building the API documentation
+
+The standard is carried on the exported target, so consumers do not need to
+set `CMAKE_CXX_STANDARD` themselves.
+
+## Building
+
+```sh
+cmake --preset gcc-14
+cmake --build --preset gcc-14
+ctest --preset gcc-14
+```
+
+`clang-18`, `debug`, `asan` and `docs` presets are also available.
 
 ## Use from CMake
 

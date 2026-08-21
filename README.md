@@ -122,10 +122,12 @@ double value = g(1.5);
 double area  = S.Integral(0.0, 3.0);
 ```
 
-Products differentiate to any order through the general Leibniz rule, expanded
-at compile time. Quotients and compositions currently support the value and
-first derivative and refuse to compile above that, rather than returning a
-wrong number.
+Every node differentiates to any order: products through the general Leibniz
+rule expanded at compile time, quotients through the recurrence that follows
+from `f = qg`, and compositions through Faa di Bruno in partial Bell
+polynomial form. None of them allocates. The exception is `Lagrange`, which
+evaluates only the value and first derivative and refuses to compile above
+that rather than returning a wrong number.
 
 Nodes store their operands **by value**. That is what makes
 `CubicSpline{x, y} * CubicSpline{x, y}` valid: a node holding references would

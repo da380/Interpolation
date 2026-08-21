@@ -121,15 +121,22 @@ Free operators build expression nodes from those. The derivative rules are:
 | --- | --- | --- |
 | `Sum`, `Difference` | Linearity | all |
 | `Product` | General Leibniz, expanded at compile time | all |
-| `Quotient` | Quotient rule | value and first |
-| `Composition` | Chain rule | value and first |
+| `Quotient` | Reciprocal recurrence from the Leibniz rule | all |
+| `Composition` | Faa di Bruno, via partial Bell polynomials | all |
 | `DerivativeNode<K>` | Index shift onto the operand | all the operand allows |
 | `PiecewisePrimitive` | Operand shifted down one order | all the operand allows |
 
-Where a rule is not implemented the node refuses to compile rather than
-returning a plausible wrong number. Higher quotient derivatives need the
-recurrence for derivatives of a reciprocal, and higher composition
-derivatives need Faa di Bruno's formula.
+Every node differentiates to any order. The quotient uses
+\f$q^{(n)} = \left(f^{(n)} - \sum_{k<n}\binom{n}{k}q^{(k)}g^{(n-k)}\right)/g\f$,
+which follows from \f$f = qg\f$; the composition uses Faa di Bruno in the
+partial Bell polynomial form, built by the recurrence
+\f$B_{n,k} = \sum_i \binom{n-1}{i-1} g^{(i)} B_{n-i,k-1}\f$ rather than a sum
+over set partitions. Both gather the operands' derivatives once and run a
+small table over them, so neither allocates.
+
+The one remaining ceiling is `Lagrange`, which evaluates only the value and
+first derivative and refuses to compile above that rather than returning a
+plausible wrong number.
 
 Antidifferentiation takes two paths. A piecewise-polynomial function exposes
 its nodes and a per-segment integral, and `Primitive` accumulates the

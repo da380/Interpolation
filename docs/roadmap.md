@@ -211,6 +211,13 @@ the general Leibniz rule expanded at compile time. No CRTP base and no
 either: with the nodes plain classes there were no shared helpers to hoist.
 Allocation-free evaluation is checked by counting allocations, not asserted.
 
+Follow-up: `Quotient` and `Composition` now differentiate to any order, by the
+reciprocal recurrence and by Faa di Bruno in partial Bell polynomial form
+respectively. Both were verified against closed forms to machine precision.
+`Lagrange` keeps its first-order ceiling deliberately: it is used only in
+specific FEM contexts inside other codes, so the machinery a global polynomial
+would need is not worth its weight.
+
 ### Phase 4 - Second dimension
 
 A minimal grid and extents abstraction, then tensor-product bilinear and

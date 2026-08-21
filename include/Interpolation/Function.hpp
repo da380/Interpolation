@@ -1,6 +1,7 @@
 #ifndef INTERPOLATION_FUNCTION_HPP
 #define INTERPOLATION_FUNCTION_HPP
 
+#include <array>
 #include <concepts>
 #include <cstddef>
 #include <type_traits>
@@ -70,8 +71,8 @@ concept CompatibleFunctions1D = requires() {
 
 namespace Detail {
 
-/** @brief Binomial coefficient, evaluated at compile time. */
-consteval std::size_t
+/** @brief Binomial coefficient. Usable at compile time and at run time. */
+constexpr std::size_t
 Binomial(std::size_t n, std::size_t k) {
     if (k > n) {
         return 0;
@@ -309,25 +310,43 @@ class Quotient {
     constexpr Quotient(F f, G g) : _f{std::move(f)}, _g{std::move(g)} {}
 
     /**
-     * @brief Evaluate the quotient or its first derivative.
+     * @brief Evaluate the quotient or its `N`th derivative.
      *
-     * Higher orders would need the general recurrence for derivatives of a
-     * reciprocal. That is deliberately not guessed at here: the alternative
-     * is silently returning a wrong number.
+     * From @f$ f = qg @f$ and the Leibniz rule,
+     *
+     * @f[
+     * q^{(n)} = \frac{1}{g}\left( f^{(n)}
+     *   - \sum_{k<n} \binom{n}{k}\, q^{(k)}\, g^{(n-k)} \right),
+     * @f]
+     *
+     * so every order follows from the ones below it. The operands'
+     * derivatives are gathered once and the recurrence runs over them, which
+     * is quadratic in `N` and allocates nothing.
      */
     template <std::size_t N = 0> constexpr Scalar Evaluate(Real x) const {
-        static_assert(N <= 1,
-                      "Quotient supports the value and the first derivative; "
-                      "higher orders need a recurrence that is not "
-                      "implemented.");
-        const auto g = static_cast<Scalar>(_g.template Evaluate<0>(x));
         if constexpr (N == 0) {
-            return static_cast<Scalar>(_f.template Evaluate<0>(x)) / g;
+            return static_cast<Scalar>(_f.template Evaluate<0>(x)) /
+                   static_cast<Scalar>(_g.template Evaluate<0>(x));
         } else {
-            const auto f = static_cast<Scalar>(_f.template Evaluate<0>(x));
-            const auto df = static_cast<Scalar>(_f.template Evaluate<1>(x));
-            const auto dg = static_cast<Scalar>(_g.template Evaluate<1>(x));
-            return (df * g - f * dg) / (g * g);
+            std::array<Scalar, N + 1> fd{};
+            std::array<Scalar, N + 1> gd{};
+            [&]<std::size_t... K>(std::index_sequence<K...>) {
+                ((fd[K] = static_cast<Scalar>(_f.template Evaluate<K>(x))),
+                 ...);
+                ((gd[K] = static_cast<Scalar>(_g.template Evaluate<K>(x))),
+                 ...);
+            }(std::make_index_sequence<N + 1>{});
+
+            std::array<Scalar, N + 1> q{};
+            for (std::size_t n = 0; n <= N; ++n) {
+                auto accumulated = fd[n];
+                for (std::size_t k = 0; k < n; ++k) {
+                    accumulated -= static_cast<Real>(Detail::Binomial(n, k)) *
+                                   q[k] * gd[n - k];
+                }
+                q[n] = accumulated / gd[0];
+            }
+            return q[N];
         }
     }
 
@@ -387,22 +406,55 @@ class Composition {
     constexpr Composition(F f, G g) : _f{std::move(f)}, _g{std::move(g)} {}
 
     /**
-     * @brief Evaluate the composition or its first derivative.
+     * @brief Evaluate the composition or its `N`th derivative.
      *
-     * Higher orders need Faa di Bruno's formula, which is not implemented.
+     * Faa di Bruno's formula, in the partial Bell polynomial form
+     *
+     * @f[
+     * (f \circ g)^{(n)} = \sum_{k=1}^{n} f^{(k)}(g)\,
+     *   B_{n,k}\!\left(g', g'', \ldots\right),
+     * @f]
+     *
+     * with the Bell polynomials built by
+     * @f$ B_{n,k} = \sum_i \binom{n-1}{i-1} g^{(i)} B_{n-i,\,k-1} @f$. That
+     * is a small triangular table rather than a sum over set partitions, so
+     * the cost is cubic in `N` at worst and still allocates nothing.
      */
     template <std::size_t N = 0> constexpr Scalar Evaluate(Real x) const {
-        static_assert(N <= 1,
-                      "Composition supports the value and the first "
-                      "derivative; higher orders need Faa di Bruno's formula, "
-                      "which is not implemented.");
         const auto inner =
             static_cast<typename F::Real>(_g.template Evaluate<0>(x));
+
         if constexpr (N == 0) {
             return _f.template Evaluate<0>(inner);
         } else {
-            return _f.template Evaluate<1>(inner) *
-                   static_cast<Scalar>(_g.template Evaluate<1>(x));
+            std::array<Scalar, N + 1> fd{};
+            std::array<Scalar, N + 1> gd{};
+            [&]<std::size_t... K>(std::index_sequence<K...>) {
+                ((fd[K] = static_cast<Scalar>(_f.template Evaluate<K>(inner))),
+                 ...);
+                ((gd[K] = static_cast<Scalar>(_g.template Evaluate<K>(x))),
+                 ...);
+            }(std::make_index_sequence<N + 1>{});
+
+            std::array<std::array<Scalar, N + 1>, N + 1> bell{};
+            bell[0][0] = static_cast<Scalar>(1);
+            for (std::size_t n = 1; n <= N; ++n) {
+                for (std::size_t k = 1; k <= n; ++k) {
+                    auto accumulated = Scalar{};
+                    for (std::size_t i = 1; i + k <= n + 1; ++i) {
+                        accumulated +=
+                            static_cast<Real>(Detail::Binomial(n - 1, i - 1)) *
+                            gd[i] * bell[n - i][k - 1];
+                    }
+                    bell[n][k] = accumulated;
+                }
+            }
+
+            auto result = Scalar{};
+            for (std::size_t k = 1; k <= N; ++k) {
+                result += fd[k] * bell[N][k];
+            }
+            return result;
         }
     }
 

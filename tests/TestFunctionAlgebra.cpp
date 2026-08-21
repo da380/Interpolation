@@ -245,3 +245,105 @@ TEST(FunctionAlgebra, ComplexOrdinatesFlowThroughTheAlgebra) {
     static_assert(std::is_same_v<typename decltype(scaled)::Scalar, Complex>);
     InterpolationTest::ExpectScaledNear(scaled(1.5), 2.0 * s(1.5));
 }
+
+TEST(FunctionAlgebra, QuotientDerivativesFollowTheReciprocalRecurrence) {
+    using namespace Interpolation;
+    // q(x) = 1/(1+x), whose nth derivative is (-1)^n n! / (1+x)^(n+1).
+    const Polynomial<double> numerator{1.0};
+    const Polynomial<double> denominator{1.0, 1.0};
+    const auto q = numerator / denominator;
+
+    const double x = 1.0;
+    const auto exact = [x](int n) {
+        double factorial = 1.0;
+        for (int i = 2; i <= n; ++i) {
+            factorial *= i;
+        }
+        return (n % 2 ? -1.0 : 1.0) * factorial / std::pow(1.0 + x, n + 1);
+    };
+
+    InterpolationTest::ExpectScaledNear(q.Evaluate<0>(x), exact(0));
+    InterpolationTest::ExpectScaledNear(q.Evaluate<1>(x), exact(1));
+    InterpolationTest::ExpectScaledNear(q.Evaluate<2>(x), exact(2));
+    InterpolationTest::ExpectScaledNear(q.Evaluate<3>(x), exact(3));
+    InterpolationTest::ExpectScaledNear(q.Evaluate<4>(x), exact(4));
+    InterpolationTest::ExpectScaledNear(q.Evaluate<5>(x), exact(5));
+}
+
+TEST(FunctionAlgebra, CompositionDerivativesFollowFaaDiBruno) {
+    using namespace Interpolation;
+
+    // An affine inner function: h(x) = (2x + 1)^4.
+    {
+        const Polynomial<double> outer{0.0, 0.0, 0.0, 0.0, 1.0}; // u^4
+        const Polynomial<double> inner{1.0, 2.0};                // 2x + 1
+        const auto h = Compose(outer, inner);
+        const double x = 1.0;
+        const double u = 3.0;
+
+        InterpolationTest::ExpectScaledNear(h.Evaluate<0>(x), std::pow(u, 4));
+        InterpolationTest::ExpectScaledNear(h.Evaluate<1>(x),
+                                            8.0 * std::pow(u, 3));
+        InterpolationTest::ExpectScaledNear(h.Evaluate<2>(x), 48.0 * u * u);
+        InterpolationTest::ExpectScaledNear(h.Evaluate<3>(x), 192.0 * u);
+        InterpolationTest::ExpectScaledNear(h.Evaluate<4>(x), 384.0);
+        InterpolationTest::ExpectScaledNear(h.Evaluate<5>(x), 0.0);
+    }
+
+    // A nonlinear inner function, where the chain rule alone is not enough:
+    // h(x) = (x^2 + 1)^3 = x^6 + 3x^4 + 3x^2 + 1.
+    {
+        const Polynomial<double> outer{0.0, 0.0, 0.0, 1.0}; // u^3
+        const Polynomial<double> inner{1.0, 0.0, 1.0};      // x^2 + 1
+        const auto h = Compose(outer, inner);
+        const Polynomial<double> expanded{1.0, 0.0, 3.0, 0.0, 3.0, 0.0, 1.0};
+
+        for (const double x : {0.4, 1.0, 1.7}) {
+            SCOPED_TRACE(x);
+            InterpolationTest::ExpectScaledNear(h.Evaluate<0>(x),
+                                                expanded.Evaluate<0>(x));
+            InterpolationTest::ExpectScaledNear(h.Evaluate<1>(x),
+                                                expanded.Evaluate<1>(x));
+            InterpolationTest::ExpectScaledNear(h.Evaluate<2>(x),
+                                                expanded.Evaluate<2>(x));
+            InterpolationTest::ExpectScaledNear(h.Evaluate<3>(x),
+                                                expanded.Evaluate<3>(x));
+            InterpolationTest::ExpectScaledNear(h.Evaluate<4>(x),
+                                                expanded.Evaluate<4>(x));
+            InterpolationTest::ExpectScaledNear(h.Evaluate<5>(x),
+                                                expanded.Evaluate<5>(x));
+            InterpolationTest::ExpectScaledNear(h.Evaluate<6>(x),
+                                                expanded.Evaluate<6>(x));
+        }
+    }
+}
+
+TEST(FunctionAlgebra, HigherDerivativesComposeAndStayAllocationFree) {
+    using namespace Interpolation;
+    const std::vector<double> x{0.0, 1.0, 2.0, 3.0, 4.0};
+    const auto y = Cubes(x);
+    const CubicSpline s{x, y};
+
+    // Differentiating a quotient of interpolants twice now compiles, where
+    // before it was a static_assert.
+    const auto ratio = s / (s + 10.0);
+    const auto curvature = Derivative<2>(ratio);
+
+    // Check it against a central difference of the first derivative.
+    const double at = 1.5;
+    const double h = 1.0e-5;
+    const double byDifference =
+        (ratio.Evaluate<1>(at + h) - ratio.Evaluate<1>(at - h)) / (2 * h);
+    EXPECT_NEAR(curvature(at), byDifference, 1.0e-4);
+
+    if constexpr (InterpolationTest::AllocationCountingEnabled()) {
+        volatile double sink = 0.0;
+        const auto before = InterpolationTest::AllocationCount();
+        for (int i = 0; i < 500; ++i) {
+            sink = sink + ratio.Evaluate<4>(0.5 + 0.001 * i);
+        }
+        const auto after = InterpolationTest::AllocationCount();
+        EXPECT_EQ(after, before) << "high-order evaluation allocated "
+                                 << (after - before) << " times";
+    }
+}

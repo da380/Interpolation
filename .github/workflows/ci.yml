@@ -202,12 +202,24 @@ jobs:
             -DINTERPOLATION_BUILD_EXAMPLES=OFF
 
       # Doxygen runs with WARN_AS_ERROR=FAIL_ON_WARNINGS, so any warning fails
-      # the job. Run it directly rather than through the CMake target so the
-      # warnings are the visible output rather than a build-tool error.
+      # the job. It writes those warnings to stderr, which shows up in the log
+      # but not in the check annotations, so a failure here reads only as
+      # "process completed with exit code 1" anywhere except the raw log. Echo
+      # them as annotations so the actual message is visible in the checks view.
       - name: Build the documentation
         run: |
-          echo "Doxygen: $(doxygen --version)"
-          doxygen build/Doxyfile
+          echo "::notice::Doxygen $(doxygen --version)"
+          set +e
+          doxygen build/Doxyfile 2> doxygen.log
+          status=$?
+          set -e
+          cat doxygen.log
+          if [ "$status" -ne 0 ]; then
+            head -n 30 doxygen.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit "$status"
+          fi
 
       - name: Upload the documentation
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'

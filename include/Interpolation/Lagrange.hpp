@@ -87,8 +87,8 @@ template <RealFloatingPointIterator I> class LagrangePolynomial {
     }
 
   private:
-    std::ptrdiff_t n;   // Number of nodes.
-    I X;                // Iterator to the start of the nodes.
+    std::ptrdiff_t n; // Number of nodes.
+    I X;              // Iterator to the start of the nodes.
 };
 
 /**
@@ -151,13 +151,13 @@ class Lagrange {
     }
 
   private:
-    xIter xS;   // Iterator to the start of the x-values.
-    xIter xF;   // Iterator to the end of hte x-values.
-    yIter yS;   // Iterator to the start of the y-values.
+    xIter xS; // Iterator to the start of the x-values.
+    xIter xF; // Iterator to the end of hte x-values.
+    yIter yS; // Iterator to the start of the y-values.
 
-    LagrangePolynomial<xIter> h;   // Lagrange Polynomial for interpolation.
+    LagrangePolynomial<xIter> h; // Lagrange Polynomial for interpolation.
 };
 
-}   // namespace Interpolation
+} // namespace Interpolation
 
 #endif

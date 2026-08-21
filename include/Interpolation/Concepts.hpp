@@ -81,6 +81,6 @@ concept InterpolationIteratorPair = requires(xIter x, yIter y) {
     { (*y) / (*x) } -> std::convertible_to<std::iter_value_t<yIter>>;
 };
 
-}   // namespace Interpolation
+} // namespace Interpolation
 
-#endif   //  INTERPOLATION_CONCEPTS_HPP
+#endif //  INTERPOLATION_CONCEPTS_HPP

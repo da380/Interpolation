@@ -65,7 +65,8 @@ class Akima {
      * @return First derivative at `x`.
      * @deprecated Use Derivative().
      */
-    [[deprecated("Use Derivative()")]] y_value_type deriv(x_value_type x) const {
+    [[deprecated("Use Derivative()")]] y_value_type
+    deriv(x_value_type x) const {
         return Derivative(x);
     }
 
@@ -167,6 +168,6 @@ Akima<xIter, yIter>::Derivative(x_value_type x) const {
                          static_cast<y_value_type>(3) * d * offset);
 }
 
-}   // namespace Interpolation
+} // namespace Interpolation
 
-#endif   // INTERPOLATION_AKIMA_SPLINE_HPP
+#endif // INTERPOLATION_AKIMA_SPLINE_HPP

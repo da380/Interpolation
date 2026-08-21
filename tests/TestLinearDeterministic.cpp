@@ -17,9 +17,9 @@ TEST(LinearDeterministic, NonuniformValuesDerivativesAndExtrapolation) {
         double derivative;
     };
     const std::vector<Sample> samples{
-        {-0.5, 0.0, 2.0}, {0.0, 1.0, 2.0}, {0.5, 2.0, 2.0},
+        {-0.5, 0.0, 2.0}, {0.0, 1.0, 2.0},  {0.5, 2.0, 2.0},
         {1.0, 3.0, -2.0}, {2.0, 1.0, -2.0}, {3.0, -1.0, 2.0},
-        {4.5, 2.0, 2.0}, {6.0, 5.0, 2.0}, {7.0, 7.0, 2.0}};
+        {4.5, 2.0, 2.0},  {6.0, 5.0, 2.0},  {7.0, 7.0, 2.0}};
 
     for (const auto &sample : samples) {
         SCOPED_TRACE(sample.x);

@@ -39,10 +39,10 @@ TEST(LagrangePolynomial, CardinalValuesPartitionAndDerivatives) {
                                             derivative2);
         InterpolationTest::ExpectScaledNear(
             basis(0, query) + basis(1, query) + basis(2, query), 1.0);
-        InterpolationTest::ExpectScaledNear(
-            basis.Derivative(0, query) + basis.Derivative(1, query) +
-                basis.Derivative(2, query),
-            0.0);
+        InterpolationTest::ExpectScaledNear(basis.Derivative(0, query) +
+                                                basis.Derivative(1, query) +
+                                                basis.Derivative(2, query),
+                                            0.0);
     }
 }
 
@@ -90,9 +90,7 @@ TEST(Lagrange, ComplexPolynomialAndDerivativeAreRecovered) {
     const auto polynomial = [&](double value) {
         return c0 + c1 * value + c2 * value * value;
     };
-    const auto derivative = [&](double value) {
-        return c1 + 2.0 * c2 * value;
-    };
+    const auto derivative = [&](double value) { return c1 + 2.0 * c2 * value; };
 
     std::vector<Complex> y;
     for (const auto value : x) {

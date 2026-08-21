@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 
 #include <Interpolation/AkimaSpline.hpp>
-#include <Interpolation/Interpolation.hpp>
 #include <Interpolation/CubicSpline.hpp>
+#include <Interpolation/Interpolation.hpp>
 #include <Interpolation/Lagrange.hpp>
 #include <Interpolation/Linear.hpp>
 #include <Interpolation/Polynomial.hpp>
@@ -35,12 +35,9 @@ static_assert(
     Interpolation::InterpolationIteratorPair<RealIterator, RealIterator>);
 static_assert(
     Interpolation::InterpolationIteratorPair<RealIterator, ComplexIterator>);
-static_assert(
-    !Interpolation::InterpolationIteratorPair<ComplexIterator,
-                                              ComplexIterator>);
+static_assert(!Interpolation::InterpolationIteratorPair<ComplexIterator,
+                                                        ComplexIterator>);
 static_assert(
     !Interpolation::InterpolationIteratorPair<IntegerIterator, RealIterator>);
 
-TEST(ConceptsAndHeaders, PublicForwardingHeadersCompileTogether) {
-    SUCCEED();
-}
+TEST(ConceptsAndHeaders, PublicForwardingHeadersCompileTogether) { SUCCEED(); }

@@ -11,7 +11,8 @@
 namespace InterpolationTest {
 
 template <typename value_t>
-void ExpectScaledNear(const value_t &actual, const value_t &expected) {
+void
+ExpectScaledNear(const value_t &actual, const value_t &expected) {
     using real_t = decltype(std::abs(expected));
     const auto scale =
         std::max<real_t>({real_t{1}, std::abs(actual), std::abs(expected)});
@@ -20,6 +21,6 @@ void ExpectScaledNear(const value_t &actual, const value_t &expected) {
     EXPECT_LE(std::abs(actual - expected), tolerance);
 }
 
-}   // namespace InterpolationTest
+} // namespace InterpolationTest
 
-#endif   // INTERPOLATION_TEST_UTILITIES_GUARD_H
+#endif // INTERPOLATION_TEST_UTILITIES_GUARD_H

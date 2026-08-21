@@ -23,7 +23,7 @@ namespace Interpolation {
  * @tparam T Real or complex floating-point coefficient type.
  */
 template <typename T>
-requires RealOrComplexFloatingPoint<T>
+    requires RealOrComplexFloatingPoint<T>
 class Polynomial1D {
   public:
     /** @brief Scalar type used for coefficients and evaluation. */
@@ -33,7 +33,8 @@ class Polynomial1D {
     /** @brief Constant coefficient iterator. */
     using const_iterator = std::vector<T>::const_iterator;
 
-    /** @brief Construct the zero polynomial with one coefficient equal to zero. */
+    /** @brief Construct the zero polynomial with one coefficient equal to zero.
+     */
     Polynomial1D() : _a{T{}} {}
 
     /** @brief Copy coefficients from a vector in ascending power order. */
@@ -60,7 +61,7 @@ class Polynomial1D {
      * @param rhs Source polynomial.
      */
     template <typename FLOAT>
-    requires std::is_convertible_v<FLOAT, T>
+        requires std::is_convertible_v<FLOAT, T>
     Polynomial1D(const Polynomial1D<FLOAT> &rhs) {
         std::transform(rhs.cbegin(), rhs.cend(), std::back_inserter(_a),
                        [](auto x) { return static_cast<T>(x); });
@@ -73,8 +74,8 @@ class Polynomial1D {
      * @return This polynomial.
      */
     template <typename FLOAT>
-        requires std::is_convertible_v<FLOAT, T> Polynomial1D<T>
-    &operator=(const Polynomial1D<FLOAT> &polinit) {
+        requires std::is_convertible_v<FLOAT, T>
+    Polynomial1D<T> &operator=(const Polynomial1D<FLOAT> &polinit) {
         std::vector<T> converted;
         converted.reserve(std::distance(polinit.cbegin(), polinit.cend()));
         std::transform(polinit.cbegin(), polinit.cend(),
@@ -105,7 +106,8 @@ class Polynomial1D {
     }
 
     /**
-     * @brief Generate a complex polynomial with normally distributed components.
+     * @brief Generate a complex polynomial with normally distributed
+     * components.
      * @param n Requested nonnegative degree.
      * @return Random polynomial of degree `n`.
      */
@@ -117,9 +119,8 @@ class Polynomial1D {
         std::mt19937_64 gen{rd()};
         std::normal_distribution<S> d{};
         std::vector<T> a;
-        std::generate_n(std::back_inserter(a), n + 1, [&]() {
-            return T{d(gen), d(gen)};
-        });
+        std::generate_n(std::back_inserter(a), n + 1,
+                        [&]() { return T{d(gen), d(gen)}; });
         return Polynomial1D(a);
     }
 
@@ -190,7 +191,8 @@ class Polynomial1D {
     std::vector<T> polycoeff() const { return _a; };
 
     /**
-     * @brief Return one coefficient, padding powers outside the range with zero.
+     * @brief Return one coefficient, padding powers outside the range with
+     * zero.
      * @param i Power index.
      */
     T polycoeff(int i) const {
@@ -317,10 +319,10 @@ class Polynomial1D {
     };
 
   private:
-    std::vector<T> _a;   // Vector of polynomial coefficients.
+    std::vector<T> _a; // Vector of polynomial coefficients.
 };
 
-}   // namespace Interpolation
+} // namespace Interpolation
 
 /**
  * @brief Add a scalar to a polynomial's constant coefficient.
@@ -479,4 +481,4 @@ operator*(const Interpolation::Polynomial1D<T> &a,
     return myval;
 };
 
-#endif   // INTERPOLATION_POLYNOMIAL_HPP
+#endif // INTERPOLATION_POLYNOMIAL_HPP

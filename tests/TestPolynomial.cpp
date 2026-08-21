@@ -12,9 +12,9 @@
 namespace {
 
 template <typename value_t>
-void ExpectCoefficients(
-    const Interpolation::Polynomial1D<value_t> &polynomial,
-    const std::vector<value_t> &expected) {
+void
+ExpectCoefficients(const Interpolation::Polynomial1D<value_t> &polynomial,
+                   const std::vector<value_t> &expected) {
     ASSERT_EQ(polynomial.polycoeff().size(), expected.size());
     for (std::size_t i = 0; i < expected.size(); ++i) {
         SCOPED_TRACE(i);
@@ -23,7 +23,7 @@ void ExpectCoefficients(
     }
 }
 
-}   // namespace
+} // namespace
 
 TEST(Polynomial1D, DefaultConstructionIsZeroPolynomial) {
     Interpolation::Polynomial1D<double> zero;
@@ -39,10 +39,8 @@ TEST(Polynomial1D, DefaultConstructionIsZeroPolynomial) {
     InterpolationTest::ExpectScaledNear(zero.polycoeff(1), 0.0);
 
     const Interpolation::Polynomial1D<double> polynomial{1.0, -2.0, 3.0};
-    ExpectCoefficients(zero + polynomial,
-                       std::vector<double>{1.0, -2.0, 3.0});
-    ExpectCoefficients(zero * polynomial,
-                       std::vector<double>{0.0, 0.0, 0.0});
+    ExpectCoefficients(zero + polynomial, std::vector<double>{1.0, -2.0, 3.0});
+    ExpectCoefficients(zero * polynomial, std::vector<double>{0.0, 0.0, 0.0});
     ExpectCoefficients(zero + 2.0, std::vector<double>{2.0});
 
     const Interpolation::Polynomial1D<std::complex<double>> complexZero;
@@ -89,37 +87,26 @@ TEST(Polynomial1D, ScalarAndPolynomialArithmetic) {
     const Interpolation::Polynomial1D<double> polynomial{1.0, -2.0, 3.0};
     const Interpolation::Polynomial1D<double> other{-1.0, 4.0};
 
-    ExpectCoefficients(polynomial + 2.0,
-                       std::vector<double>{3.0, -2.0, 3.0});
-    ExpectCoefficients(2.0 + polynomial,
-                       std::vector<double>{3.0, -2.0, 3.0});
-    ExpectCoefficients(polynomial - 2.0,
-                       std::vector<double>{-1.0, -2.0, 3.0});
-    ExpectCoefficients(2.0 - polynomial,
-                       std::vector<double>{1.0, 2.0, -3.0});
-    ExpectCoefficients(polynomial * 2.0,
-                       std::vector<double>{2.0, -4.0, 6.0});
-    ExpectCoefficients(2.0 * polynomial,
-                       std::vector<double>{2.0, -4.0, 6.0});
-    ExpectCoefficients(polynomial / 2.0,
-                       std::vector<double>{0.5, -1.0, 1.5});
+    ExpectCoefficients(polynomial + 2.0, std::vector<double>{3.0, -2.0, 3.0});
+    ExpectCoefficients(2.0 + polynomial, std::vector<double>{3.0, -2.0, 3.0});
+    ExpectCoefficients(polynomial - 2.0, std::vector<double>{-1.0, -2.0, 3.0});
+    ExpectCoefficients(2.0 - polynomial, std::vector<double>{1.0, 2.0, -3.0});
+    ExpectCoefficients(polynomial * 2.0, std::vector<double>{2.0, -4.0, 6.0});
+    ExpectCoefficients(2.0 * polynomial, std::vector<double>{2.0, -4.0, 6.0});
+    ExpectCoefficients(polynomial / 2.0, std::vector<double>{0.5, -1.0, 1.5});
 
-    ExpectCoefficients(polynomial + other,
-                       std::vector<double>{0.0, 2.0, 3.0});
-    ExpectCoefficients(polynomial - other,
-                       std::vector<double>{2.0, -6.0, 3.0});
+    ExpectCoefficients(polynomial + other, std::vector<double>{0.0, 2.0, 3.0});
+    ExpectCoefficients(polynomial - other, std::vector<double>{2.0, -6.0, 3.0});
     ExpectCoefficients(polynomial * other,
                        std::vector<double>{-1.0, 6.0, -11.0, 12.0});
-    ExpectCoefficients(-polynomial,
-                       std::vector<double>{-1.0, 2.0, -3.0});
+    ExpectCoefficients(-polynomial, std::vector<double>{-1.0, 2.0, -3.0});
 
     auto compoundScalar = polynomial;
     compoundScalar += 2.0;
     compoundScalar -= 1.0;
     compoundScalar *= 4.0;
     compoundScalar /= 2.0;
-    ExpectCoefficients(compoundScalar,
-                       std::vector<double>{4.0, -4.0, 6.0});
+    ExpectCoefficients(compoundScalar, std::vector<double>{4.0, -4.0, 6.0});
 
     auto compoundPolynomial = polynomial;
     compoundPolynomial += other;
@@ -156,8 +143,7 @@ TEST(Polynomial1D, ConversionComplexValuesAndStreamOutput) {
 TEST(Polynomial1D, CopyMoveAndCrossTypeAssignment) {
     using FloatPolynomial = Interpolation::Polynomial1D<float>;
     using DoublePolynomial = Interpolation::Polynomial1D<double>;
-    using ComplexPolynomial =
-        Interpolation::Polynomial1D<std::complex<double>>;
+    using ComplexPolynomial = Interpolation::Polynomial1D<std::complex<double>>;
     static_assert(std::is_copy_assignable_v<DoublePolynomial>);
     static_assert(std::is_move_assignable_v<DoublePolynomial>);
 
@@ -174,13 +160,11 @@ TEST(Polynomial1D, CopyMoveAndCrossTypeAssignment) {
     DoublePolynomial moveSource{4.0, -3.0, 2.0, -1.0};
     DoublePolynomial moved{0.0};
     moved = std::move(moveSource);
-    ExpectCoefficients(moved,
-                       std::vector<double>{4.0, -3.0, 2.0, -1.0});
+    ExpectCoefficients(moved, std::vector<double>{4.0, -3.0, 2.0, -1.0});
 
     ComplexPolynomial complexAssigned{{0.0, 1.0}};
     complexAssigned = converted;
-    ExpectCoefficients(complexAssigned,
-                       std::vector<std::complex<double>>{{1.0, 0.0},
-                                                         {2.0, 0.0},
-                                                         {-0.5, 0.0}});
+    ExpectCoefficients(
+        complexAssigned,
+        std::vector<std::complex<double>>{{1.0, 0.0}, {2.0, 0.0}, {-0.5, 0.0}});
 }

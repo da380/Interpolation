@@ -64,9 +64,9 @@ class Linear {
     y_value_type Derivative(x_value_type x) const;
 
   private:
-    xIter _xS;   // Iterator to start of x values.
-    xIter _xF;   // Iterator to end of x values.
-    yIter _yS;   // Iterator to start of y values.
+    xIter _xS; // Iterator to start of x values.
+    xIter _xF; // Iterator to end of x values.
+    yIter _yS; // Iterator to start of y values.
 };
 
 template <typename xIter, typename yIter>
@@ -116,6 +116,6 @@ Linear<xIter, yIter>::Derivative(const x_value_type x) const {
     return (_yS[i2] - _yS[i1]) / h;
 }
 
-}   // namespace Interpolation
+} // namespace Interpolation
 
-#endif   //  INTERPOLATION_LINEAR_HPP
+#endif //  INTERPOLATION_LINEAR_HPP

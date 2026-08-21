@@ -50,7 +50,8 @@ class CubicSpline {
     CubicSpline() = default;
 
     /**
-     * @brief Construct a spline with independently selected endpoint conditions.
+     * @brief Construct a spline with independently selected endpoint
+     * conditions.
      * @param xStart Iterator to the first abscissa.
      * @param xFinish Iterator one past the final abscissa.
      * @param yStart Iterator to the ordinate corresponding to `xStart`.
@@ -88,7 +89,8 @@ class CubicSpline {
                 y_value_type leftDerivative, y_value_type rightDerivative);
 
     /**
-     * @brief Evaluate the spline interpolant or its endpoint-segment extrapolation.
+     * @brief Evaluate the spline interpolant or its endpoint-segment
+     * extrapolation.
      * @param x Query abscissa.
      * @return Spline value at `x`.
      */
@@ -105,11 +107,11 @@ class CubicSpline {
     using Vector = Eigen::Matrix<y_value_type, Eigen::Dynamic, 1>;
     using Matrix = Eigen::SparseMatrix<y_value_type>;
 
-    xIter _xS;   // Iterator to the start of the x-values.
-    xIter _xF;   // Iterator to the end of hte x-values.
-    yIter _yS;   // Iterator to the start of the y-values.
+    xIter _xS; // Iterator to the start of the x-values.
+    xIter _xF; // Iterator to the end of hte x-values.
+    yIter _yS; // Iterator to the start of the y-values.
 
-    Vector _ypp;   // Cubic spline coefficients
+    Vector _ypp; // Cubic spline coefficients
 };
 
 // Definition of the main constructor.
@@ -258,6 +260,6 @@ CubicSpline<xIter, yIter>::Derivative(x_value_type x) const {
                ((-3 * a * a + 1) * _ypp(i1) + (3 * b * b - 1) * _ypp(i2));
 };
 
-}   // namespace Interpolation
+} // namespace Interpolation
 
-#endif   //  INTERPOLATION_CUBIC_SPLINE_HPP
+#endif //  INTERPOLATION_CUBIC_SPLINE_HPP

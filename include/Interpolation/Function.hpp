@@ -135,6 +135,94 @@ class Constant {
     Scalar _value;
 };
 
+/**
+ * @brief A function that borrows another function.
+ *
+ * The operators below take their operands by value, which is what makes the
+ * expression nodes safe to build from temporaries. That is the right default,
+ * but it means an operand which is expensive to copy — or which cannot be
+ * copied at all, such as a `Piecewise` whose pieces own their samples — needs
+ * a way in. This is it, and the borrow is explicit at the call site rather
+ * than implicit in an overload:
+ *
+ * @code
+ * auto slope = Derivative(Ref(model));   // borrows; model must outlive it
+ * @endcode
+ *
+ * @tparam F The borrowed function type.
+ */
+template <Function1D F> class FunctionRef {
+  public:
+    /** @brief Abscissa precision. */
+    using Real = typename F::Real;
+    /** @brief Value type, real or complex. */
+    using Scalar = typename F::Scalar;
+
+    /** @brief Borrow `f`, which must outlive the result. */
+    constexpr explicit FunctionRef(const F &f) : _f{&f} {}
+
+    /**
+     * @brief Evaluate the borrowed function or its `N`th derivative.
+     * @tparam N Derivative order; `0` is the value itself.
+     * @param x Query abscissa.
+     */
+    template <std::size_t N = 0> constexpr Scalar Evaluate(Real x) const {
+        return _f->template Evaluate<N>(x);
+    }
+
+    /** @brief Evaluate the node; the same as `Evaluate<0>`. */
+    constexpr Scalar operator()(Real x) const { return Evaluate<0>(x); }
+
+    // Forwarded so that a borrowed piecewise-polynomial still satisfies
+    // PiecewisePolynomial1D and Antidifferentiable1D, and can therefore be
+    // handed to Primitive() without being copied. Each is available only when
+    // the underlying function has it.
+
+    /** @brief Number of nodes, when the borrowed function has them. */
+    constexpr std::size_t Size() const
+        requires requires(const F &f) { f.Size(); }
+    {
+        return _f->Size();
+    }
+
+    /** @brief Abscissa of node `i`, when the borrowed function has nodes. */
+    constexpr Real Node(std::size_t i) const
+        requires requires(const F &f, std::size_t j) { f.Node(j); }
+    {
+        return _f->Node(i);
+    }
+
+    /** @brief Segment containing `x`, when the borrowed function has one. */
+    constexpr std::size_t Segment(Real x) const
+        requires requires(const F &f, Real v) { f.Segment(v); }
+    {
+        return _f->Segment(x);
+    }
+
+    /** @brief Integral over part of segment `i`, when available. */
+    constexpr Scalar SegmentIntegral(std::size_t i, Real t) const
+        requires requires(const F &f, std::size_t j, Real v) {
+            f.SegmentIntegral(j, v);
+        }
+    {
+        return _f->SegmentIntegral(i, t);
+    }
+
+    /** @brief Closed-form antiderivative, when the borrowed function has one.
+     */
+    constexpr Scalar Antiderivative(Real x) const
+        requires requires(const F &f, Real v) { f.Antiderivative(v); }
+    {
+        return _f->Antiderivative(x);
+    }
+
+    /** @brief The borrowed function. */
+    constexpr const F &Function() const { return *_f; }
+
+  private:
+    const F *_f;
+};
+
 /** @brief The identity function, `x`. */
 template <typename R>
     requires ::Interpolation::Real<R>
@@ -569,6 +657,16 @@ template <Antidifferentiable1D F> class ClosedFormPrimitive {
 // These are constrained on Function1D, so they take part in overload
 // resolution only for actual functions and cannot capture unrelated types.
 // ---------------------------------------------------------------------------
+
+/**
+ * @brief Borrow a function so it can enter the algebra without being copied.
+ * @param f Must outlive every node built from the result.
+ */
+template <Function1D F>
+constexpr auto
+Ref(const F &f) {
+    return FunctionRef<F>{f};
+}
 
 /** @brief Differentiate a function `K` times, giving another function. */
 template <std::size_t K = 1, Function1D F>

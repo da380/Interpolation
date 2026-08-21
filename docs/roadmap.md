@@ -279,9 +279,12 @@ functions together with
 - direct evaluation with an explicit rule for the value *at* a breakpoint,
   whether that is the left limit, the right limit, or a per-object choice.
 
-That layer is a separate, considered piece of work after phase 4. It is
-listed here so phases 2 and 3 leave room for it rather than designing it
-opportunistically along the way. The relevant asymmetry to remember: a
+That layer is now built, as `Piecewise` plus the `SplitAtRepeats` factory.
+Pieces tile their interval, continuity at a breakpoint is deliberately not
+checked, and evaluation is right-continuous with `Limits` giving both sides.
+Extracting a piece is the primary operation rather than an afterthought: in
+practice a layer is pulled out and handed to a solver working over exactly
+that interval, so `Piece` returns a view carrying its own bounds. The relevant asymmetry to remember: a
 repeated node is fatal during *setup* for barycentric `Lagrange`, which
 divides by node differences, whereas `Linear` would merely see a zero-width
 interval it never selects. Uniform rejection is the simpler invariant.

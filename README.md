@@ -129,6 +129,14 @@ polynomial form. None of them allocates. The exception is `Lagrange`, which
 evaluates only the value and first derivative and refuses to compile above
 that rather than returning a wrong number.
 
+Because the operators take operands by value, something expensive or
+impossible to copy — a `Piecewise` whose pieces own their samples, for
+instance — enters the algebra through `Ref`, which borrows explicitly:
+
+```cpp
+auto slope = Derivative(Ref(model));   // model must outlive it
+```
+
 Nodes store their operands **by value**. That is what makes
 `CubicSpline{x, y} * CubicSpline{x, y}` valid: a node holding references would
 dangle as soon as it was built from a temporary, which is what every
@@ -140,6 +148,48 @@ Use `<Interpolation/Linear.hpp>`, `<Interpolation/AkimaSpline.hpp>`,
 `<Interpolation/Lagrange.hpp>`, or `<Interpolation/Polynomial.hpp>` to include a
 single facility, and `<Interpolation/Interpolation.hpp>` for the complete
 public API.
+
+## Piecewise-continuous functions
+
+Real data is often piecewise continuous — a layered model, say, where a
+quantity jumps at an interface. The base interpolators require strictly
+increasing abscissae and reject such data outright. `Piecewise` is where the
+discontinuity is represented instead, as structure rather than as a
+coincidence in the samples.
+
+A doubled abscissa is one common convention for flagging a jump, so there is a
+factory that reads it:
+
+```cpp
+#include <Interpolation/Piecewise.hpp>
+
+// radius has 3.0 twice; density differs across it.
+auto model = Interpolation::SplitAtRepeats(radius, density,
+    [](auto r, auto d) { return Interpolation::CubicSpline{std::move(r), std::move(d)}; });
+
+auto [below, above] = model.Limits(3.0);   // both one-sided values
+double value = model(3.0);                 // right-continuous by default
+
+auto layer = model.Piece(1);               // the outer layer, on its own
+double lo = layer.Lower(), hi = layer.Upper();
+double mass = Primitive(layer).Integral(lo, hi);
+```
+
+Extracting a piece is usually more useful than evaluating through the whole
+object: a single layer can be handed to a quadrature or an ODE solver that
+will work over exactly that interval, and it carries that interval with it.
+The extracted view borrows, so it is valid while the model lives.
+
+Three deliberate choices. The pieces **tile** their interval, since a gap would
+mean the function is undefined there, which is a different thing. Continuity
+at a breakpoint is **not checked** — whether the pieces agree is your business,
+and enforcing it would only start an argument about tolerance. And evaluation
+is **right-continuous** by default, with `Limits` giving both sides, which at a
+real interface is usually what is wanted.
+
+All pieces share a type. Mixing kinds is type erasure, a separate concern: a
+type-erased `Function1D` would itself be a `Function1D`, so `Piecewise` of it
+would give mixed pieces without this class knowing anything about it.
 
 ## Two dimensions
 

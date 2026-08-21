@@ -13,6 +13,7 @@ Each public forwarding header exposes one facility:
 | `<Interpolation/Polynomial.hpp>` | `Polynomial` |
 | `<Interpolation/Bilinear.hpp>` | `Bilinear` |
 | `<Interpolation/BicubicSpline.hpp>` | `BicubicSpline` |
+| `<Interpolation/Piecewise.hpp>` | `Piecewise`, `PieceView`, `Side`, `SplitAtRepeats` |
 | `<Interpolation/Grid.hpp>` | `Extents`, `Extents2D`, `Grid2DView` |
 | `<Interpolation/Function.hpp>` | `Function1D`, the operators, `Derivative`, `Compose`, `Primitive` |
 | `<Interpolation/Interpolation.hpp>` | All of the above and the public concepts |
@@ -55,8 +56,9 @@ Input is checked at construction, which throws `std::invalid_argument` if the
 ranges differ in length, are too short for the method, or the abscissae are
 not strictly increasing. Abscissae must be **strictly** increasing: a repeated
 node is not an encoding for a discontinuity, and every method here divides by
-a node difference somewhere. Represent a piecewise-continuous function by
-composing several interpolators instead.
+a node difference somewhere. Represent a piecewise-continuous function with
+`Piecewise`, which is built for exactly that, and use `SplitAtRepeats` if your
+samples use a doubled abscissa to mark the jump.
 
 | Routine | Input precondition | Query behavior |
 | --- | --- | --- |
@@ -68,6 +70,7 @@ composing several interpolators instead.
 | `Polynomial` | Defaults to zero; explicit input needs at least 1 coefficient | Evaluates for any supported scalar argument |
 | `Bilinear` | At least 2 nodes on each axis | Continues the nearest edge cell |
 | `BicubicSpline` | At least 2 nodes on each axis | Continues the nearest edge cell |
+| `Piecewise` | At least 1 piece; breakpoints strictly increasing | Nearest piece continues outside the domain |
 
 ## Scalar types
 

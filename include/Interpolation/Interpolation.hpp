@@ -10,6 +10,7 @@
 #include <Interpolation/Grid.hpp>
 #include <Interpolation/Lagrange.hpp>
 #include <Interpolation/Linear.hpp>
+#include <Interpolation/Piecewise.hpp>
 #include <Interpolation/Polynomial.hpp>
 #include <Interpolation/Samples.hpp>
 #include <Interpolation/Tridiagonal.hpp>

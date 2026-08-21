@@ -65,7 +65,7 @@ jobs:
       # counts agree.
       - name: Check the oracle is intact
         run: |
-          expected=73
+          expected=84
           count=$(ctest --test-dir build -N | sed -n 's/^Total Tests: //p')
           echo "Discovered $count tests, expected at least $expected."
           if [ "$count" -lt "$expected" ]; then

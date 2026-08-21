@@ -36,6 +36,13 @@ WARN_FORMAT            = "$file:$line: $text"
 GENERATE_HTML          = YES
 HTML_OUTPUT            = html
 GENERATE_TREEVIEW      = YES
+
+# The documentation contains LaTeX formulas. Without MathJax, Doxygen renders
+# them to images by shelling out to latex, which makes a full TeX installation
+# a build requirement and fails anywhere it is absent, CI included. MathJax
+# renders them in the browser instead.
+USE_MATHJAX            = YES
+MATHJAX_VERSION        = MathJax_3
 GENERATE_LATEX         = NO
 GENERATE_XML           = NO
 GENERATE_MAN           = NO

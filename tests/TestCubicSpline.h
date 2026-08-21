@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <complex>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <numbers>
@@ -15,15 +16,17 @@
 
 template <Interpolation::Real x_value_t, Interpolation::RealOrComplex y_value_t>
 int
-CubicSplineCheck() {
+CubicSplineCheck(std::uint64_t seed) {
     using namespace Interpolation;
 
+    // One generator, seeded by the caller, drives every random choice here.
+    // A failure is then replayable from the seed the test reports.
+    std::mt19937_64 gen{seed};
+
     // Make a random cubic polynomial.
-    auto p = Polynomial1D<y_value_t>::Random(3);
+    auto p = Polynomial<y_value_t>::Random(3, gen());
 
     // set the number of sampling points randomly
-    std::random_device rd{};
-    std::mt19937_64 gen{rd()};
     std::uniform_int_distribution dint{5, 100};
     auto nSample = dint(gen);
 
@@ -95,8 +98,10 @@ SolveDense(std::vector<std::vector<y_value_t>> a, std::vector<y_value_t> b) {
         if (std::abs(a[pivot][column]) == 0) {
             throw std::runtime_error("singular reference system");
         }
-        std::swap(a[column], a[pivot]);
-        std::swap(b[column], b[pivot]);
+        if (pivot != column) {
+            std::swap(a[column], a[pivot]);
+            std::swap(b[column], b[pivot]);
+        }
 
         for (std::size_t row = column + 1; row < n; ++row) {
             const auto factor = a[row][column] / a[column][column];

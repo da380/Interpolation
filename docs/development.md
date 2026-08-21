@@ -50,6 +50,26 @@ tree.
 - Keep independent reference calculations separate from production internals.
 - Do not regenerate expected numerical output merely because behavior changed;
   explain and review every oracle change.
+- Randomised checks take an explicit seed and print it, so a failure can be
+  replayed. Override with `INTERPOLATION_TEST_SEED` to run them on different
+  data.
+
+## Benchmarks
+
+The two algorithmic changes in phase 2 have a harness that measures them
+against the implementations they replaced, rather than resting on complexity
+arguments:
+
+```sh
+cmake -S . -B build -DINTERPOLATION_BUILD_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target InterpolationBenchmarks
+./build/benchmarks/InterpolationBenchmarks
+```
+
+It is off by default and never run in CI, since timings on a shared runner
+are noise. It reports the best of several repetitions and the largest relative
+difference between the two implementations, so a speedup that changed the
+answers is visible rather than hidden.
 
 ## Continuous integration
 

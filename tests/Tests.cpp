@@ -10,6 +10,7 @@
 
 #include "TestCubicSpline.h"
 #include "TestLinear.h"
+#include "TestUtilities.h"
 
 namespace {
 
@@ -82,64 +83,76 @@ CheckAgainstDenseReference(const std::vector<double> &x,
 // Tests for linear interpolation
 
 TEST(Linear, CheckRealSingle) {
-    int i = LinearCheck<float, float>();
+    int i = LinearCheck<float, float>(
+        InterpolationTest::ReportedSeed(11400714819339976104ull));
     EXPECT_EQ(0, i);
 }
 
 TEST(Linear, CheckRealDouble) {
-    int i = LinearCheck<double, double>();
+    int i = LinearCheck<double, double>(
+        InterpolationTest::ReportedSeed(11400714819356753723ull));
     EXPECT_EQ(0, i);
 }
 
 TEST(Linear, CheckRealLongDouble) {
-    int i = LinearCheck<long double, long double>();
+    int i = LinearCheck<long double, long double>(
+        InterpolationTest::ReportedSeed(11400714819373531342ull));
     EXPECT_EQ(0, i);
 }
 
 TEST(Linear, CheckComplexSingle) {
-    int i = LinearCheck<float, std::complex<float>>();
+    int i = LinearCheck<float, std::complex<float>>(
+        InterpolationTest::ReportedSeed(11400714819390308961ull));
     EXPECT_EQ(0, i);
 }
 
 TEST(Linear, CheckComplexDouble) {
-    int i = LinearCheck<double, std::complex<double>>();
+    int i = LinearCheck<double, std::complex<double>>(
+        InterpolationTest::ReportedSeed(11400714819407086580ull));
     EXPECT_EQ(0, i);
 }
 
 TEST(Linear, CheckComplexLongDouble) {
-    int i = LinearCheck<long double, std::complex<long double>>();
+    int i = LinearCheck<long double, std::complex<long double>>(
+        InterpolationTest::ReportedSeed(11400714819423864199ull));
     EXPECT_EQ(0, i);
 }
 
 // Tests for cubic spline interpolation
 
 TEST(CubicSpline, CheckRealSingle) {
-    int i = CubicSplineCheck<double, double>();
+    int i = CubicSplineCheck<double, double>(
+        InterpolationTest::ReportedSeed(11400714819440641818ull));
     EXPECT_EQ(0, i);
 }
 
 TEST(CubicSpline, CheckRealDouble) {
-    int i = CubicSplineCheck<double, double>();
+    int i = CubicSplineCheck<double, double>(
+        InterpolationTest::ReportedSeed(11400714819457419437ull));
     EXPECT_EQ(0, i);
 }
 
 TEST(CubicSpline, CheckRealLongDouble) {
-    int i = CubicSplineCheck<long double, long double>();
+    int i = CubicSplineCheck<long double, long double>(
+        InterpolationTest::ReportedSeed(11400714819474197056ull));
     EXPECT_EQ(0, i);
 }
 
 TEST(CubicSpline, CheckComplexSingle) {
-    int i = CubicSplineCheck<float, std::complex<float>>();
+    int i = CubicSplineCheck<float, std::complex<float>>(
+        InterpolationTest::ReportedSeed(11400714819490974675ull));
     EXPECT_EQ(0, i);
 }
 
 TEST(CubicSpline, CheckComplexDouble) {
-    int i = CubicSplineCheck<double, std::complex<double>>();
+    int i = CubicSplineCheck<double, std::complex<double>>(
+        InterpolationTest::ReportedSeed(11400714819507752294ull));
     EXPECT_EQ(0, i);
 }
 
 TEST(CubicSpline, CheckComplexLongDouble) {
-    int i = CubicSplineCheck<long double, std::complex<long double>>();
+    int i = CubicSplineCheck<long double, std::complex<long double>>(
+        InterpolationTest::ReportedSeed(11400714819524529913ull));
     EXPECT_EQ(0, i);
 }
 

@@ -20,7 +20,7 @@ A rendered copy of this plan is published at
 | Dimensionality | 1D now, with seams cut so 2D adds API rather than breaking it |
 | Namespace | Stays `Interpolation`; the README prose changes to match |
 | Formatting | `.clang-format` cleaned, whole tree reformatted in one isolated commit |
-| Benchmarks | Minimal in-house `std::chrono` target, opt-in, run by hand |
+| Benchmarks | Minimal in-house `std::chrono` target, opt-in, run by hand (done, phase 2) |
 | Duplicate abscissae | Rejected at the base; piecewise continuity becomes its own later layer |
 
 API breakage is acceptable: the two consuming libraries pin commit SHAs, so
@@ -181,12 +181,15 @@ lying after a subtraction, and a seedable `Random`.
 
 **Exit:** no Eigen in the tree; ported tests green; `-Wall -Wextra` clean.
 
-Status: done except for the `Polynomial` cleanup and the benchmark harness.
+Status: done.
 Eigen is gone, the concepts are a refinement over NumericConcepts, all four
 interpolators take ranges and expose `Evaluate<N>`, the three copies of the
 locate-and-clamp are one `Detail::LocateSegment`, `Lagrange` is barycentric,
-and construction validates by throwing. The suite is 43 tests and the Release
-and Debug counts now agree, because no precondition compiles out any more.
+and construction validates by throwing. `Polynomial` uses hidden friends with
+`common_type_t` results, trims trailing zeros so `Degree()` stops lying after a
+subtraction, and takes an explicit seed. The benchmark harness measures both
+claimed speedups. The suite is 48 tests, and the Release and Debug counts now
+agree because no precondition compiles out any more.
 
 ### Phase 3 - The function algebra
 

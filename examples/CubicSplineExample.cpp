@@ -47,7 +47,7 @@ main() {
     //  using y_value_t = std::complex<x_value_t>;
 
     // Make a random polynomial.
-    auto p = Polynomial1D<y_value_t>::Random(3);
+    auto p = Polynomial<y_value_t>::Random(3);
 
     // Set the function arrays.
     std::vector<x_value_t> x;

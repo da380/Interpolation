@@ -3,11 +3,13 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <initializer_list>
 #include <iostream>
 #include <iterator>
 #include <numeric>
 #include <random>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -25,7 +27,7 @@ namespace Interpolation {
  */
 template <typename T>
     requires RealOrComplex<T>
-class Polynomial1D {
+class Polynomial {
   public:
     /** @brief Scalar type used for coefficients and evaluation. */
     using value_type = T;
@@ -36,25 +38,25 @@ class Polynomial1D {
 
     /** @brief Construct the zero polynomial with one coefficient equal to zero.
      */
-    Polynomial1D() : _a{T{}} {}
+    Polynomial() : _a{T{}} {}
 
     /** @brief Copy coefficients from a vector in ascending power order. */
-    Polynomial1D(const std::vector<T> &a) : _a{a} {}
+    Polynomial(const std::vector<T> &a) : _a{a} {}
     /** @brief Move coefficients from a vector in ascending power order. */
-    Polynomial1D(std::vector<T> &&a) : _a{std::move(a)} {}
+    Polynomial(std::vector<T> &&a) : _a{std::move(a)} {}
 
     /** @brief Construct from coefficients in ascending power order. */
-    Polynomial1D(std::initializer_list<T> list) : _a{std::vector<T>{list}} {}
+    Polynomial(std::initializer_list<T> list) : _a{std::vector<T>{list}} {}
 
     /** @brief Copy a polynomial. */
-    Polynomial1D(const Polynomial1D &) = default;
+    Polynomial(const Polynomial &) = default;
     /** @brief Move a polynomial. */
-    Polynomial1D(Polynomial1D &&) = default;
+    Polynomial(Polynomial &&) = default;
 
     /** @brief Copy-assign a polynomial with the same coefficient type. */
-    Polynomial1D &operator=(const Polynomial1D &) = default;
+    Polynomial &operator=(const Polynomial &) = default;
     /** @brief Move-assign a polynomial with the same coefficient type. */
-    Polynomial1D &operator=(Polynomial1D &&) = default;
+    Polynomial &operator=(Polynomial &&) = default;
 
     /**
      * @brief Copy a polynomial while converting its coefficient type.
@@ -63,7 +65,7 @@ class Polynomial1D {
      */
     template <typename FLOAT>
         requires std::is_convertible_v<FLOAT, T>
-    Polynomial1D(const Polynomial1D<FLOAT> &rhs) {
+    Polynomial(const Polynomial<FLOAT> &rhs) {
         std::transform(rhs.cbegin(), rhs.cend(), std::back_inserter(_a),
                        [](auto x) { return static_cast<T>(x); });
     }
@@ -76,7 +78,7 @@ class Polynomial1D {
      */
     template <typename FLOAT>
         requires std::is_convertible_v<FLOAT, T>
-    Polynomial1D<T> &operator=(const Polynomial1D<FLOAT> &polinit) {
+    Polynomial<T> &operator=(const Polynomial<FLOAT> &polinit) {
         std::vector<T> converted;
         converted.reserve(std::distance(polinit.cbegin(), polinit.cend()));
         std::transform(polinit.cbegin(), polinit.cend(),
@@ -89,40 +91,64 @@ class Polynomial1D {
     /**
      * @brief Generate a real polynomial with normally distributed coefficients.
      * @param n Requested nonnegative degree.
+     * @param seed Seed for the generator. Explicit so that a randomised test
+     *        can report it and a failure can be replayed exactly.
      * @return Random polynomial of degree `n`.
      */
-    static Polynomial1D Random(int n)
+    static Polynomial Random(int n, std::uint64_t seed)
         requires Real<T>
     {
-        std::random_device rd{};
-        std::mt19937_64 gen{rd()};
+        std::mt19937_64 gen{seed};
         std::normal_distribution<T> d{};
         std::vector<T> a;
-        std::generate_n(std::back_inserter(a), n + 1, [&]() {
-            if constexpr (Real<T>) {
-                return d(gen);
-            }
-        });
-        return Polynomial1D(a);
+        std::generate_n(std::back_inserter(a), n + 1, [&] { return d(gen); });
+        return Polynomial(std::move(a));
     }
 
     /**
      * @brief Generate a complex polynomial with normally distributed
      * components.
      * @param n Requested nonnegative degree.
+     * @param seed Seed for the generator. Explicit so that a randomised test
+     *        can report it and a failure can be replayed exactly.
      * @return Random polynomial of degree `n`.
      */
-    static Polynomial1D Random(int n)
+    static Polynomial Random(int n, std::uint64_t seed)
         requires Complex<T>
     {
         using S = typename T::value_type;
-        std::random_device rd{};
-        std::mt19937_64 gen{rd()};
+        std::mt19937_64 gen{seed};
         std::normal_distribution<S> d{};
         std::vector<T> a;
         std::generate_n(std::back_inserter(a), n + 1,
-                        [&]() { return T{d(gen), d(gen)}; });
-        return Polynomial1D(a);
+                        [&] { return T{d(gen), d(gen)}; });
+        return Polynomial(std::move(a));
+    }
+
+    /**
+     * @brief Draw a seed from the system entropy source.
+     *
+     * Randomised tests should seed deterministically and report the seed they
+     * used, so that a failure can be replayed. Call this once, print it, and
+     * pass it to Random().
+     */
+    static std::uint64_t RandomSeed() {
+        std::random_device rd{};
+        return (static_cast<std::uint64_t>(rd()) << 32) ^ rd();
+    }
+
+    /**
+     * @brief Drop trailing zero coefficients.
+     *
+     * Degree() is derived from the coefficient count, so without this a
+     * subtraction that cancels the leading terms leaves the polynomial
+     * claiming a degree it no longer has.
+     */
+    Polynomial &Trim() {
+        while (_a.size() > 1 && _a.back() == T{}) {
+            _a.pop_back();
+        }
+        return *this;
     }
 
     /**
@@ -240,20 +266,20 @@ class Polynomial1D {
     };
 
     /** @brief Return the coefficient-wise additive inverse. */
-    Polynomial1D<T> operator-() const {
+    Polynomial<T> operator-() const {
 
         std::vector<T> myvec(this->Degree() + 1);
         for (int idx = 0; idx < this->Degree() + 1; ++idx) {
             myvec[idx] = -this->_a[idx];
         };
-        Polynomial1D<T> myret{myvec};
+        Polynomial<T> myret{myvec};
         return myret;
     };
 
     /** @brief Add a scalar to the constant coefficient. */
     template <typename FLOAT>
         requires std::is_convertible_v<FLOAT, T>
-    Polynomial1D<T> &operator+=(FLOAT b) {
+    Polynomial<T> &operator+=(FLOAT b) {
         _a[0] += b;
         return *this;
     }
@@ -261,7 +287,7 @@ class Polynomial1D {
     /** @brief Subtract a scalar from the constant coefficient. */
     template <typename FLOAT>
         requires std::is_convertible_v<FLOAT, T>
-    Polynomial1D<T> &operator-=(FLOAT b) {
+    Polynomial<T> &operator-=(FLOAT b) {
         _a[0] -= b;
         return *this;
     }
@@ -269,7 +295,7 @@ class Polynomial1D {
     /** @brief Multiply every coefficient by a scalar. */
     template <typename FLOAT>
         requires std::is_convertible_v<FLOAT, T>
-    Polynomial1D<T> &operator*=(FLOAT b) {
+    Polynomial<T> &operator*=(FLOAT b) {
         for (int idx = 0; idx < this->Degree() + 1; ++idx) {
             _a[idx] *= b;
         };
@@ -279,7 +305,7 @@ class Polynomial1D {
     /** @brief Divide every coefficient by a nonzero scalar. */
     template <typename FLOAT>
         requires std::is_convertible_v<FLOAT, T>
-    Polynomial1D<T> &operator/=(FLOAT b) {
+    Polynomial<T> &operator/=(FLOAT b) {
         for (int idx = 0; idx < this->Degree() + 1; ++idx) {
             _a[idx] /= b;
         };
@@ -289,7 +315,7 @@ class Polynomial1D {
     /** @brief Add another polynomial coefficient-wise. */
     template <typename FLOAT>
         requires std::is_convertible_v<FLOAT, T>
-    Polynomial1D<T> &operator+=(const Polynomial1D<FLOAT> &b) {
+    Polynomial<T> &operator+=(const Polynomial<FLOAT> &b) {
 
         bool sdeg = (this->Degree() < b.Degree());
         for (int idx = 0; idx < this->Degree() + 1; ++idx) {
@@ -306,7 +332,7 @@ class Polynomial1D {
     /** @brief Subtract another polynomial coefficient-wise. */
     template <typename FLOAT>
         requires std::is_convertible_v<FLOAT, T>
-    Polynomial1D<T> &operator-=(const Polynomial1D<FLOAT> &b) {
+    Polynomial<T> &operator-=(const Polynomial<FLOAT> &b) {
 
         bool sdeg = (this->Degree() < b.Degree());
         for (int idx = 0; idx < this->Degree() + 1; ++idx) {
@@ -323,7 +349,7 @@ class Polynomial1D {
     /** @brief Multiply by another polynomial using coefficient convolution. */
     template <typename FLOAT>
         requires std::is_convertible_v<FLOAT, T>
-    Polynomial1D<T> &operator*=(const Polynomial1D<FLOAT> &b) {
+    Polynomial<T> &operator*=(const Polynomial<FLOAT> &b) {
         int maxc = this->Degree() + b.Degree();
 
         std::vector<T> newcoeff(maxc + 1, 0.0);
@@ -344,7 +370,7 @@ class Polynomial1D {
      * @return `os`.
      */
     friend std::ostream &operator<<(std::ostream &os,
-                                    const Polynomial1D<T> &obj) {
+                                    const Polynomial<T> &obj) {
         // Write obj to stream
         for (int idx = 0; idx < obj.Degree() + 1; ++idx) {
             os << obj.polycoeff(idx) << " ";
@@ -352,167 +378,137 @@ class Polynomial1D {
         return os;
     };
 
+    // ---------------------------------------------------------------------
+    // Arithmetic.
+    //
+    // These are hidden friends: found by argument-dependent lookup on a
+    // Polynomial operand and invisible otherwise, rather than templates at
+    // global namespace scope that take part in every unrelated overload
+    // resolution in the program.
+    //
+    // The result type is common_type_t of the two operands rather than the
+    // left operand's type, so adding a complex scalar to a real polynomial
+    // gives a complex polynomial instead of silently discarding the
+    // imaginary part.
+    // ---------------------------------------------------------------------
+
+    /** @brief Add a scalar to the constant coefficient. */
+    template <typename U>
+        requires(RealOrComplex<U> || std::integral<U>)
+    friend Polynomial<std::common_type_t<T, U>> operator+(const Polynomial &a,
+                                                          const U &b) {
+        Polynomial<std::common_type_t<T, U>> result{a};
+        result += b;
+        return result;
+    }
+
+    /** @brief Add a polynomial to a scalar. */
+    template <typename U>
+        requires(RealOrComplex<U> || std::integral<U>)
+    friend Polynomial<std::common_type_t<T, U>> operator+(const U &b,
+                                                          const Polynomial &a) {
+        return a + b;
+    }
+
+    /** @brief Subtract a scalar from the constant coefficient. */
+    template <typename U>
+        requires(RealOrComplex<U> || std::integral<U>)
+    friend Polynomial<std::common_type_t<T, U>> operator-(const Polynomial &a,
+                                                          const U &b) {
+        Polynomial<std::common_type_t<T, U>> result{a};
+        result -= b;
+        return result;
+    }
+
+    /** @brief Subtract a polynomial from a scalar. */
+    template <typename U>
+        requires(RealOrComplex<U> || std::integral<U>)
+    friend Polynomial<std::common_type_t<T, U>> operator-(const U &b,
+                                                          const Polynomial &a) {
+        return -a + b;
+    }
+
+    /** @brief Multiply every coefficient by a scalar. */
+    template <typename U>
+        requires(RealOrComplex<U> || std::integral<U>)
+    friend Polynomial<std::common_type_t<T, U>> operator*(const Polynomial &a,
+                                                          const U &b) {
+        Polynomial<std::common_type_t<T, U>> result{a};
+        result *= b;
+        return result;
+    }
+
+    /** @brief Multiply a scalar by a polynomial. */
+    template <typename U>
+        requires(RealOrComplex<U> || std::integral<U>)
+    friend Polynomial<std::common_type_t<T, U>> operator*(const U &b,
+                                                          const Polynomial &a) {
+        return a * b;
+    }
+
+    /** @brief Divide every coefficient by a nonzero scalar. */
+    template <typename U>
+        requires(RealOrComplex<U> || std::integral<U>)
+    friend Polynomial<std::common_type_t<T, U>> operator/(const Polynomial &a,
+                                                          const U &b) {
+        Polynomial<std::common_type_t<T, U>> result{a};
+        result /= b;
+        return result;
+    }
+
+    /** @brief Add two polynomials coefficient-wise, trimming the result. */
+    template <typename U>
+    friend Polynomial<std::common_type_t<T, U>>
+    operator+(const Polynomial &a, const Polynomial<U> &b) {
+        using R = std::common_type_t<T, U>;
+        const auto degree = std::max(a.Degree(), b.Degree());
+        std::vector<R> c(static_cast<std::size_t>(degree + 1), R{});
+        for (int i = 0; i <= degree; ++i) {
+            c[static_cast<std::size_t>(i)] =
+                static_cast<R>(a.polycoeff(i)) + static_cast<R>(b.polycoeff(i));
+        }
+        return Polynomial<R>{std::move(c)}.Trim();
+    }
+
+    template <typename U>
+    /** @brief Subtract two polynomials coefficient-wise, trimming the result.
+     */
+    friend Polynomial<std::common_type_t<T, U>>
+    operator-(const Polynomial &a, const Polynomial<U> &b) {
+        using R = std::common_type_t<T, U>;
+        const auto degree = std::max(a.Degree(), b.Degree());
+        std::vector<R> c(static_cast<std::size_t>(degree + 1), R{});
+        for (int i = 0; i <= degree; ++i) {
+            c[static_cast<std::size_t>(i)] =
+                static_cast<R>(a.polycoeff(i)) - static_cast<R>(b.polycoeff(i));
+        }
+        return Polynomial<R>{std::move(c)}.Trim();
+    }
+
+    /** @brief Multiply two polynomials by coefficient convolution. */
+    template <typename U>
+    friend Polynomial<std::common_type_t<T, U>>
+    operator*(const Polynomial &a, const Polynomial<U> &b) {
+        using R = std::common_type_t<T, U>;
+        if (a.Degree() < 0 || b.Degree() < 0) {
+            return Polynomial<R>{};
+        }
+        const auto degree = a.Degree() + b.Degree();
+        std::vector<R> c(static_cast<std::size_t>(degree + 1), R{});
+        for (int i = 0; i <= degree; ++i) {
+            for (int j = 0; j <= i; ++j) {
+                c[static_cast<std::size_t>(i)] +=
+                    static_cast<R>(a.polycoeff(j)) *
+                    static_cast<R>(b.polycoeff(i - j));
+            }
+        }
+        return Polynomial<R>{std::move(c)};
+    }
+
   private:
     std::vector<T> _a; // Vector of polynomial coefficients.
 };
 
 } // namespace Interpolation
-
-/**
- * @brief Add a scalar to a polynomial's constant coefficient.
- * @param a Polynomial operand.
- * @param b Scalar operand.
- */
-template <typename T, typename FLOAT>
-    requires std::is_convertible_v<FLOAT, T>
-Interpolation::Polynomial1D<T>
-operator+(Interpolation::Polynomial1D<T> a, FLOAT b) {
-    Interpolation::Polynomial1D<T> myval = a;
-    myval += b;
-    return myval;
-};
-
-/**
- * @brief Add a scalar to a polynomial's constant coefficient.
- * @param b Scalar operand.
- * @param a Polynomial operand.
- */
-template <typename T, typename FLOAT>
-    requires std::is_convertible_v<FLOAT, T>
-Interpolation::Polynomial1D<T>
-operator+(FLOAT b, Interpolation::Polynomial1D<T> a) {
-    Interpolation::Polynomial1D<T> myval = a;
-    myval += b;
-    return myval;
-};
-
-/**
- * @brief Subtract a scalar from a polynomial's constant coefficient.
- * @param a Polynomial operand.
- * @param b Scalar operand.
- */
-template <typename T, typename FLOAT>
-    requires std::is_convertible_v<FLOAT, T>
-Interpolation::Polynomial1D<T>
-operator-(Interpolation::Polynomial1D<T> a, FLOAT b) {
-    Interpolation::Polynomial1D<T> myval = a;
-    myval -= b;
-    return myval;
-};
-
-/**
- * @brief Subtract a polynomial from a scalar constant polynomial.
- * @param b Scalar operand.
- * @param a Polynomial operand.
- */
-template <typename T, typename FLOAT>
-    requires std::is_convertible_v<FLOAT, T>
-Interpolation::Polynomial1D<T>
-operator-(FLOAT b, Interpolation::Polynomial1D<T> a) {
-    Interpolation::Polynomial1D<T> myval = -a;
-    myval += b;
-    return myval;
-};
-
-/**
- * @brief Multiply every polynomial coefficient by a scalar.
- * @param a Polynomial operand.
- * @param b Scalar operand.
- */
-template <typename T, typename FLOAT>
-    requires std::is_convertible_v<FLOAT, T>
-Interpolation::Polynomial1D<T>
-operator*(Interpolation::Polynomial1D<T> a, FLOAT b) {
-    Interpolation::Polynomial1D<T> myval = a;
-    myval *= b;
-    return myval;
-};
-
-/**
- * @brief Multiply every polynomial coefficient by a scalar.
- * @param b Scalar operand.
- * @param a Polynomial operand.
- */
-template <typename T, typename FLOAT>
-    requires std::is_convertible_v<FLOAT, T>
-Interpolation::Polynomial1D<T>
-operator*(FLOAT b, Interpolation::Polynomial1D<T> a) {
-    Interpolation::Polynomial1D<T> myval = a;
-    myval *= b;
-    return myval;
-};
-
-/**
- * @brief Divide every polynomial coefficient by a nonzero scalar.
- * @param a Polynomial operand.
- * @param b Scalar operand.
- */
-template <typename T, typename FLOAT>
-    requires std::is_convertible_v<FLOAT, T>
-Interpolation::Polynomial1D<T>
-operator/(Interpolation::Polynomial1D<T> a, FLOAT b) {
-    Interpolation::Polynomial1D<T> myval = a;
-    myval /= b;
-    return myval;
-};
-
-/**
- * @brief Add two polynomials coefficient-wise.
- * @param a Left polynomial operand.
- * @param b Right polynomial operand.
- */
-template <typename T, typename FLOAT>
-    requires std::is_convertible_v<FLOAT, T>
-Interpolation::Polynomial1D<T>
-operator+(const Interpolation::Polynomial1D<T> &a,
-          const Interpolation::Polynomial1D<FLOAT> &b) {
-    int maxval = std::max(a.Degree(), b.Degree());
-    std::vector<T> myvec(maxval + 1, 0.0);
-    for (int idx = 0; idx < maxval + 1; ++idx) {
-        myvec[idx] = a.polycoeff(idx) + b.polycoeff(idx);
-    };
-    Interpolation::Polynomial1D<T> myval{myvec};
-    return myval;
-};
-
-/**
- * @brief Subtract two polynomials coefficient-wise.
- * @param a Left polynomial operand.
- * @param b Right polynomial operand.
- */
-template <typename T, typename FLOAT>
-    requires std::is_convertible_v<FLOAT, T>
-Interpolation::Polynomial1D<T>
-operator-(const Interpolation::Polynomial1D<T> &a,
-          const Interpolation::Polynomial1D<FLOAT> &b) {
-    int maxval = std::max(a.Degree(), b.Degree());
-    std::vector<T> myvec(maxval + 1, 0.0);
-    for (int idx = 0; idx < maxval + 1; ++idx) {
-        myvec[idx] = a.polycoeff(idx) - b.polycoeff(idx);
-    };
-    Interpolation::Polynomial1D<T> myval{myvec};
-    return myval;
-};
-
-/**
- * @brief Multiply two polynomials by coefficient convolution.
- * @param a Left polynomial operand.
- * @param b Right polynomial operand.
- */
-template <typename T, typename FLOAT>
-    requires std::is_convertible_v<FLOAT, T>
-Interpolation::Polynomial1D<T>
-operator*(const Interpolation::Polynomial1D<T> &a,
-          const Interpolation::Polynomial1D<FLOAT> &b) {
-    int maxc = a.Degree() + b.Degree();
-    std::vector<T> newcoeff(maxc + 1, 0.0);
-    for (int idx = 0; idx < maxc + 1; ++idx) {
-        for (int idx2 = 0; idx2 < idx + 1; ++idx2) {
-            newcoeff[idx] += a.polycoeff(idx2) * b.polycoeff(idx - idx2);
-        }
-    };
-    Interpolation::Polynomial1D<T> myval{newcoeff};
-    return myval;
-};
 
 #endif // INTERPOLATION_POLYNOMIAL_HPP

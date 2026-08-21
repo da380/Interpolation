@@ -99,6 +99,8 @@ if(PROJECT_IS_TOP_LEVEL)
   option(INTERPOLATION_BUILD_EXAMPLES "Build the example programs" ON)
   option(INTERPOLATION_BUILD_TESTS    "Build the test suite" ON)
   option(INTERPOLATION_BUILD_DOCS     "Build the Doxygen API documentation" OFF)
+  option(INTERPOLATION_BUILD_BENCHMARKS
+         "Build the benchmark harness" OFF)
 
   option(INTERPOLATION_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 
@@ -123,6 +125,11 @@ if(PROJECT_IS_TOP_LEVEL)
   if(INTERPOLATION_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+  endif()
+
+  # Off by default and never run in CI: timings on a shared runner are noise.
+  if(INTERPOLATION_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
   endif()
 
   if(INTERPOLATION_BUILD_DOCS)

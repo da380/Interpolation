@@ -3,6 +3,7 @@
 
 #include <Interpolation/Interpolation.hpp>
 #include <complex>
+#include <cstdint>
 #include <limits>
 #include <numbers>
 #include <random>
@@ -10,15 +11,17 @@
 
 template <Interpolation::Real x_value_t, Interpolation::RealOrComplex y_value_t>
 int
-LinearCheck() {
+LinearCheck(std::uint64_t seed) {
     using namespace Interpolation;
 
+    // One generator, seeded by the caller, drives every random choice here.
+    // A failure is then replayable from the seed the test reports.
+    std::mt19937_64 gen{seed};
+
     // Make a random linear polynomial.
-    auto p = Polynomial1D<y_value_t>::Random(1);
+    auto p = Polynomial<y_value_t>::Random(1, gen());
 
     // set the number of sampling points randomly
-    std::random_device rd{};
-    std::mt19937_64 gen{rd()};
     std::uniform_int_distribution dint{5, 100};
     auto nSample = dint(gen);
 

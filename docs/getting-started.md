@@ -10,7 +10,7 @@ Each public forwarding header exposes one facility:
 | `<Interpolation/CubicSpline.hpp>` | `CubicSpline`, `BoundaryCondition` |
 | `<Interpolation/AkimaSpline.hpp>` | `AkimaSpline` |
 | `<Interpolation/Lagrange.hpp>` | `Lagrange`, `LagrangeBasis` |
-| `<Interpolation/Polynomial.hpp>` | `Polynomial1D` |
+| `<Interpolation/Polynomial.hpp>` | `Polynomial` |
 | `<Interpolation/Interpolation.hpp>` | All of the above and the public concepts |
 
 Interpolation is header-only and has no external dependencies. Link the CMake
@@ -61,7 +61,7 @@ composing several interpolators instead.
 | `AkimaSpline` | At least 3 nodes | Extrapolates with the first or final cubic segment |
 | `Lagrange` | At least 1 node | Evaluates the global polynomial for any real query |
 | `LagrangeBasis` | At least 1 node | Evaluates the selected basis polynomial for any real query |
-| `Polynomial1D` | Defaults to zero; explicit input needs at least 1 coefficient | Evaluates for any supported scalar argument |
+| `Polynomial` | Defaults to zero; explicit input needs at least 1 coefficient | Evaluates for any supported scalar argument |
 
 ## Scalar types
 
@@ -73,15 +73,15 @@ types must support the conversions and arithmetic required by
 weights from real magnitudes, so its cubic values and derivatives support both
 real and complex ordinates.
 
-`Polynomial1D` supports real and complex floating-point coefficient types. Its
+`Polynomial` supports real and complex floating-point coefficient types. Its
 coefficient list is ordered from the constant term upward:
 
 ```cpp
-Interpolation::Polynomial1D<double> p{1.0, -2.0, 3.0};
+Interpolation::Polynomial<double> p{1.0, -2.0, 3.0};
 // p(x) = 1 - 2x + 3x^2
 ```
 
-A default-constructed `Polynomial1D` is the degree-zero polynomial with the
+A default-constructed `Polynomial` is the degree-zero polynomial with the
 single coefficient `0`.
 
 Construction and assignment from a polynomial with a convertible coefficient

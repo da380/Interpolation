@@ -37,20 +37,20 @@ main() {
     //   >);
 
     // polynomials:
-    // Interpolation::Polynomial1D<double> vecpoly{1.0, 2.0};
-    // Interpolation::Polynomial1D<double> vecpoly2 = vecpoly * 2.0;
+    // Interpolation::Polynomial<double> vecpoly{1.0, 2.0};
+    // Interpolation::Polynomial<double> vecpoly2 = vecpoly * 2.0;
     // vecpoly2 += vecpoly;
     // vecpoly2 +=1.0;
     // std::cout << vecpoly2.polycoeff(0) << vecpoly2.polycoeff(1) << std::endl;
     // std::cout << vecpoly2 << std::endl;
 
-    Interpolation::Polynomial1D<double> vecpoly{1.0, 2.0};
-    Interpolation::Polynomial1D<double> vecpoly3{1.0, 2.0};
-    Interpolation::Polynomial1D<double> vecpolyadd = 2 + vecpoly;
-    Interpolation::Polynomial1D<double> vecpolysub = 2.0 - vecpoly;
-    Interpolation::Polynomial1D<double> vecpolymult = 2.0 * vecpoly;
-    Interpolation::Polynomial1D<double> vecpolydiv = vecpoly / 2.0;
-    Interpolation::Polynomial1D<double> vecpoly2{1.0, 2.0, 3.0};
+    Interpolation::Polynomial<double> vecpoly{1.0, 2.0};
+    Interpolation::Polynomial<double> vecpoly3{1.0, 2.0};
+    Interpolation::Polynomial<double> vecpolyadd = 2 + vecpoly;
+    Interpolation::Polynomial<double> vecpolysub = 2.0 - vecpoly;
+    Interpolation::Polynomial<double> vecpolymult = 2.0 * vecpoly;
+    Interpolation::Polynomial<double> vecpolydiv = vecpoly / 2.0;
+    Interpolation::Polynomial<double> vecpoly2{1.0, 2.0, 3.0};
 
     std::cout << "Initial: " << vecpoly << std::endl;
     std::cout << "Addition of 2: " << vecpolyadd << std::endl;
@@ -91,7 +91,7 @@ main() {
     std::cout << std::endl;
     std::cout << "Initial: " << vecpoly << std::endl;
     std::cout << "Multiplier: " << vecpoly3 << std::endl;
-    Interpolation::Polynomial1D<float> vecpoly4 = vecpoly3 * vecpoly;
+    Interpolation::Polynomial<float> vecpoly4 = vecpoly3 * vecpoly;
     std::cout << "Final: " << vecpoly4 << std::endl;
 
     std::cout << "Full output: " << vecpoly << std::endl;

@@ -96,7 +96,7 @@ contributes to every query, including extrapolation.
 
 ## Polynomial operations
 
-`Polynomial1D<T>` stores coefficients in ascending power order. Default
+`Polynomial<T>` stores coefficients in ascending power order. Default
 construction produces the degree-zero polynomial with coefficient `0`. It
 evaluates the polynomial and its derivative with Horner-style recurrences,
 evaluates the zero-constant antiderivative with `Primitive`, and computes

@@ -217,21 +217,76 @@ class Lagrange {
                       "first derivative; higher barycentric derivatives need "
                       "a recurrence that is not implemented yet.");
 
-        auto result = Scalar{};
-        for (std::size_t i = 0; i < Size(); ++i) {
-            if constexpr (N == 1) {
-                result += _basis.template Evaluate<1>(i, x) * _y[i];
-            } else {
-                result += _basis(i, x) * _y[i];
+        // Both branches accumulate over the nodes once. Summing the cardinal
+        // basis functions instead would recompute the shared barycentric
+        // denominator for every one of them, which is quadratic and throws
+        // away the whole point of the barycentric form.
+        const auto n = Size();
+        const auto k = NodeIndex(x);
+
+        if constexpr (N == 1) {
+            if (k != NoNode()) {
+                // p'(x_k) = sum_{j!=k} (w_j/w_k)(y_j - y_k)/(x_k - x_j)
+                const auto wk = _basis.Weight(k);
+                auto slope = Scalar{};
+                for (std::size_t j = 0; j < n; ++j) {
+                    if (j != k) {
+                        slope += (_basis.Weight(j) / wk) * (_y[j] - _y[k]) /
+                                 (_basis.Node(k) - _basis.Node(j));
+                    }
+                }
+                return slope;
             }
+
+            auto denominator = Real{};
+            auto numerator = Scalar{};
+            for (std::size_t j = 0; j < n; ++j) {
+                const auto term = _basis.Weight(j) / (x - _basis.Node(j));
+                denominator += term;
+                numerator += term * _y[j];
+            }
+            const auto value = numerator / denominator;
+
+            // p'(x) = sum_j w_j (p(x) - y_j) / (x - x_j)^2 / D(x)
+            auto slope = Scalar{};
+            for (std::size_t j = 0; j < n; ++j) {
+                const auto gap = x - _basis.Node(j);
+                slope += _basis.Weight(j) * (value - _y[j]) / (gap * gap);
+            }
+            return slope / denominator;
+        } else {
+            if (k != NoNode()) {
+                return _y[k];
+            }
+
+            auto denominator = Real{};
+            auto numerator = Scalar{};
+            for (std::size_t j = 0; j < n; ++j) {
+                const auto term = _basis.Weight(j) / (x - _basis.Node(j));
+                denominator += term;
+                numerator += term * _y[j];
+            }
+            return numerator / denominator;
         }
-        return result;
     }
 
     /** @brief Evaluate the interpolant; the same as `Evaluate<0>`. */
     Scalar operator()(Real x) const { return Evaluate<0>(x); }
 
   private:
+    static constexpr std::size_t NoNode() {
+        return static_cast<std::size_t>(-1);
+    }
+
+    std::size_t NodeIndex(Real x) const {
+        for (std::size_t j = 0; j < Size(); ++j) {
+            if (x == _basis.Node(j)) {
+                return j;
+            }
+        }
+        return NoNode();
+    }
+
     YView _y;
     LagrangeBasis<XView> _basis;
 };

@@ -6,9 +6,33 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
 #include <limits>
 
 namespace InterpolationTest {
+
+/**
+ * @brief Report the seed a randomised check will use, and return it.
+ *
+ * Seeding from std::random_device makes a CI failure unreproducible: the run
+ * that failed used a value nobody recorded. These checks take a fixed seed
+ * instead, and print it into the GoogleTest trace so a failure names the
+ * input that produced it.
+ *
+ * Override at runtime with INTERPOLATION_TEST_SEED to re-run the same checks
+ * on different data.
+ */
+inline std::uint64_t
+ReportedSeed(std::uint64_t fixedSeed) {
+    auto seed = fixedSeed;
+    if (const char *override = std::getenv("INTERPOLATION_TEST_SEED")) {
+        seed = std::strtoull(override, nullptr, 0);
+    }
+    std::cout << "[    SEED  ] " << seed << std::endl;
+    return seed;
+}
 
 template <typename value_t>
 void

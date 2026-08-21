@@ -14,7 +14,7 @@ noted below. The library has no external dependencies.
 | `AkimaSpline` | Local piecewise-cubic interpolation for real or complex ordinates | 3 nodes |
 | `Lagrange` | Global polynomial interpolation of sampled values | 1 node |
 | `LagrangeBasis` | Individual Lagrange cardinal basis functions | 1 node |
-| `Polynomial1D` | Polynomial evaluation, calculus, and arithmetic | Defaults to zero; otherwise 1 coefficient |
+| `Polynomial` | Polynomial evaluation, calculus, and arithmetic | Defaults to zero; otherwise 1 coefficient |
 
 All interpolators take ranges. An lvalue container is borrowed, so it must
 outlive the interpolator and must not be reallocated; an rvalue is moved in

@@ -29,6 +29,11 @@ using NumericConcepts::Complex;
 using NumericConcepts::RealOrComplex;
 
 /**
+ * @brief The underlying real precision of a real or complex type.
+ */
+using NumericConcepts::RemoveComplex;
+
+/**
  * @brief A range of abscissae.
  *
  * This refines `NumericConcepts::RealRange`, which requires only an

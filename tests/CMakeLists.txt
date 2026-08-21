@@ -18,7 +18,9 @@ add_executable(Tests
                TestLagrange.cpp
                TestLinearDeterministic.cpp
                TestPolynomial.cpp
-               TestRangeSemantics.cpp)
+               TestRangeSemantics.cpp
+               TestFunctionAlgebra.cpp
+               AllocationCounter.cpp)
 
 target_link_libraries(Tests PRIVATE Interpolation::Interpolation gtest_main)
 target_compile_options(Tests PRIVATE ${INTERPOLATION_WARNINGS})

@@ -123,6 +123,49 @@ class CubicSpline {
     /** @brief Evaluate the spline; the same as `Evaluate<0>`. */
     Scalar operator()(Real x) const { return Evaluate<0>(x); }
 
+    /** @brief Abscissa of node `i`. */
+    Real Node(std::size_t i) const { return _x[i]; }
+
+    /** @brief Index of the segment used to evaluate `x`. */
+    std::size_t Segment(Real x) const { return Detail::LocateSegment(_x, x); }
+
+    /**
+     * @brief Integral of segment `i` from its left node over a width `t`.
+     *
+     * With @f$ u = t/h @f$ the segment integrates term by term to
+     *
+     * @f[
+     * h\left[ y_i\left(u - \frac{u^2}{2}\right)
+     *   + y_{i+1}\frac{u^2}{2}
+     *   + \frac{h^2}{6}\left(
+     *       M_i\left(-\frac14 - \frac{(1-u)^4}{4} + \frac{(1-u)^2}{2}\right)
+     *     + M_{i+1}\left(\frac{u^4}{4} - \frac{u^2}{2}\right)
+     *     \right)\right],
+     * @f]
+     *
+     * which at @f$ u = 1 @f$ reduces to the familiar
+     * @f$ h(y_i + y_{i+1})/2 - h^3(M_i + M_{i+1})/24 @f$.
+     */
+    Scalar SegmentIntegral(std::size_t i, Real t) const {
+        const auto h = _x[i + 1] - _x[i];
+        const auto u = t / h;
+        const auto v = static_cast<Real>(1) - u;
+        constexpr auto half = static_cast<Real>(1) / static_cast<Real>(2);
+        constexpr auto quarter = static_cast<Real>(1) / static_cast<Real>(4);
+        constexpr auto oneSixth = static_cast<Real>(1) / static_cast<Real>(6);
+
+        const auto left = u - half * u * u;
+        const auto right = half * u * u;
+        const auto curvatureLeft =
+            -quarter - quarter * v * v * v * v + half * v * v;
+        const auto curvatureRight = quarter * u * u * u * u - half * u * u;
+
+        return h *
+               (_y[i] * left + _y[i + 1] * right +
+                oneSixth * h * h *
+                    (_ypp[i] * curvatureLeft + _ypp[i + 1] * curvatureRight));
+    }
+
   private:
     XView _x;
     YView _y;

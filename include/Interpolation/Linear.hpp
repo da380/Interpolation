@@ -83,6 +83,27 @@ class Linear {
     /** @brief Evaluate the interpolant; the same as `Evaluate<0>`. */
     constexpr Scalar operator()(Real x) const { return Evaluate<0>(x); }
 
+    /** @brief Abscissa of node `i`. */
+    constexpr Real Node(std::size_t i) const { return _x[i]; }
+
+    /** @brief Index of the segment used to evaluate `x`. */
+    constexpr std::size_t Segment(Real x) const {
+        return Detail::LocateSegment(_x, x);
+    }
+
+    /**
+     * @brief Integral of segment `i` from its left node over a width `t`.
+     *
+     * Exposed so that Primitive() can accumulate an antiderivative without
+     * this class having to carry one. On a segment the interpolant is
+     * `y[i] + m t`, so the integral is `y[i] t + m t^2 / 2`.
+     */
+    constexpr Scalar SegmentIntegral(std::size_t i, Real t) const {
+        const auto h = _x[i + 1] - _x[i];
+        const auto slope = (_y[i + 1] - _y[i]) / h;
+        return _y[i] * t + slope * (t * t) / static_cast<Real>(2);
+    }
+
   private:
     XView _x;
     YView _y;

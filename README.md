@@ -16,6 +16,10 @@ noted below. The library has no external dependencies.
 | `LagrangeBasis` | Individual Lagrange cardinal basis functions | 1 node |
 | `Polynomial` | Polynomial evaluation, calculus, and arithmetic | Defaults to zero; otherwise 1 coefficient |
 
+Every one of these models the `Function1D` concept, which is what lets them be
+combined arithmetically, differentiated, composed and integrated as functions
+rather than only evaluated at a point.
+
 All interpolators take ranges. An lvalue container is borrowed, so it must
 outlive the interpolator and must not be reallocated; an rvalue is moved in
 and owned, so the interpolator can outlive its source. Abscissae must be
@@ -90,6 +94,38 @@ Interpolation::CubicSpline owning{std::move(x), std::move(y)};
 Construction throws `std::invalid_argument` if the two ranges differ in
 length, are too short for the method, or the abscissae are not strictly
 increasing.
+
+## The function algebra
+
+Anything modelling `Function1D` exposes `Evaluate<N>(x)`, the `N`th derivative
+at `x`, with `operator()` as `Evaluate<0>`. That one change turns
+differentiation from a member function that returns a number into a node that
+is itself a function, so it composes:
+
+```cpp
+#include <Interpolation/Function.hpp>
+
+Interpolation::CubicSpline s{x, y};
+
+auto g  = Derivative(s) * s + 2.0;   // a function, not a number
+auto dg = Derivative(g);             // differentiate the product
+auto S  = Primitive(s);              // antiderivative, vanishing at x.front()
+
+double value = g(1.5);
+double area  = S.Integral(0.0, 3.0);
+```
+
+Products differentiate to any order through the general Leibniz rule, expanded
+at compile time. Quotients and compositions currently support the value and
+first derivative and refuse to compile above that, rather than returning a
+wrong number.
+
+Nodes store their operands **by value**. That is what makes
+`CubicSpline{x, y} * CubicSpline{x, y}` valid: a node holding references would
+dangle as soon as it was built from a temporary, which is what every
+subexpression is. Interpolators are cheap to copy, since they hold views
+unless they were given rvalues. Evaluation allocates nothing, and there is a
+test that counts allocations to keep it that way.
 
 Use `<Interpolation/Linear.hpp>`, `<Interpolation/AkimaSpline.hpp>`,
 `<Interpolation/Lagrange.hpp>`, or `<Interpolation/Polynomial.hpp>` to include a

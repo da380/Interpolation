@@ -4,6 +4,7 @@
 #include <Interpolation/AkimaSpline.hpp>
 #include <Interpolation/Concepts.hpp>
 #include <Interpolation/CubicSpline.hpp>
+#include <Interpolation/Function.hpp>
 #include <Interpolation/Lagrange.hpp>
 #include <Interpolation/Linear.hpp>
 #include <Interpolation/Polynomial.hpp>

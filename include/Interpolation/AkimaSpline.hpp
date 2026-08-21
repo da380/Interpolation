@@ -85,6 +85,29 @@ class AkimaSpline {
     /** @brief Evaluate the interpolant; the same as `Evaluate<0>`. */
     Scalar operator()(Real x) const { return Evaluate<0>(x); }
 
+    /** @brief Abscissa of node `i`. */
+    Real Node(std::size_t i) const { return _x[i]; }
+
+    /** @brief Index of the segment used to evaluate `x`. */
+    std::size_t Segment(Real x) const { return Detail::LocateSegment(_x, x); }
+
+    /**
+     * @brief Integral of segment `i` from its left node over a width `t`.
+     *
+     * The piece is the cubic `y + s t + c t^2 + d t^3`, so the integral is
+     * `y t + s t^2/2 + c t^3/3 + d t^4/4`.
+     */
+    Scalar SegmentIntegral(std::size_t i, Real t) const {
+        const auto h = _x[i + 1] - _x[i];
+        const auto two = static_cast<Scalar>(2);
+        const auto three = static_cast<Scalar>(3);
+        const auto c = (three * _m[i] - two * _s[i] - _s[i + 1]) / h;
+        const auto d = (_s[i] + _s[i + 1] - two * _m[i]) / (h * h);
+        return _y[i] * t + _s[i] * (t * t) / static_cast<Real>(2) +
+               c * (t * t * t) / static_cast<Real>(3) +
+               d * (t * t * t * t) / static_cast<Real>(4);
+    }
+
   private:
     XView _x;
     YView _y;

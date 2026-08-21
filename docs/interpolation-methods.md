@@ -109,3 +109,31 @@ coefficient convolution. The historical spelling `Primative` remains as a
 deprecated forwarding alias. Cross-type construction and assignment convert
 each coefficient when the source scalar type is convertible to the destination
 scalar type.
+
+## The function algebra
+
+Every routine above models `Function1D`: it names an abscissa type `Real`, a
+value type `Scalar`, and evaluates `Evaluate<N>(x)`, the `N`th derivative.
+
+Free operators build expression nodes from those. The derivative rules are:
+
+| Node | Derivative rule | Orders supported |
+| --- | --- | --- |
+| `Sum`, `Difference` | Linearity | all |
+| `Product` | General Leibniz, expanded at compile time | all |
+| `Quotient` | Quotient rule | value and first |
+| `Composition` | Chain rule | value and first |
+| `DerivativeNode<K>` | Index shift onto the operand | all the operand allows |
+| `PiecewisePrimitive` | Operand shifted down one order | all the operand allows |
+
+Where a rule is not implemented the node refuses to compile rather than
+returning a plausible wrong number. Higher quotient derivatives need the
+recurrence for derivatives of a reciprocal, and higher composition
+derivatives need Faa di Bruno's formula.
+
+Antidifferentiation takes two paths. A piecewise-polynomial function exposes
+its nodes and a per-segment integral, and `Primitive` accumulates the
+cumulative integral once when the node is built, so an interpolator carries no
+antiderivative state unless one is asked for. A function with a closed-form
+antiderivative, such as `Polynomial`, provides it directly. `Lagrange` supports
+neither yet: it is a single global polynomial rather than a piecewise one.

@@ -202,6 +202,15 @@ specialisation to write per node.
 **Exit:** `Derivative(s) * s + 2.0` evaluates, allocation-free, against
 analytic answers.
 
+Status: done. `Function1D` plus free operators, with `Sum`, `Difference`,
+`Product`, `Quotient`, `Negate`, `Composition`, `DerivativeNode<K>` and two
+`Primitive` forms. Nodes store operands by value, so the dangling-reference
+bug on `developDA` cannot be written. Products differentiate to any order by
+the general Leibniz rule expanded at compile time. No CRTP base and no
+`Traits` specialisation was needed, and in the event no deducing `this`
+either: with the nodes plain classes there were no shared helpers to hoist.
+Allocation-free evaluation is checked by counting allocations, not asserted.
+
 ### Phase 4 - Second dimension
 
 A minimal grid and extents abstraction, then tensor-product bilinear and

@@ -31,6 +31,16 @@ class Polynomial {
   public:
     /** @brief Scalar type used for coefficients and evaluation. */
     using value_type = T;
+    /**
+     * @brief Abscissa precision, so that Polynomial models Function1D.
+     *
+     * A complex polynomial is still a function of a real abscissa as far as
+     * the algebra is concerned; its coefficients and values are what carry
+     * the imaginary part.
+     */
+    using Real = RemoveComplex<T>;
+    /** @brief Value type, real or complex. */
+    using Scalar = T;
     /** @brief Mutable coefficient iterator. */
     using iterator = std::vector<T>::iterator;
     /** @brief Constant coefficient iterator. */
@@ -96,7 +106,7 @@ class Polynomial {
      * @return Random polynomial of degree `n`.
      */
     static Polynomial Random(int n, std::uint64_t seed)
-        requires Real<T>
+        requires ::Interpolation::Real<T>
     {
         std::mt19937_64 gen{seed};
         std::normal_distribution<T> d{};
@@ -114,7 +124,7 @@ class Polynomial {
      * @return Random polynomial of degree `n`.
      */
     static Polynomial Random(int n, std::uint64_t seed)
-        requires Complex<T>
+        requires ::Interpolation::Complex<T>
     {
         using S = typename T::value_type;
         std::mt19937_64 gen{seed};
@@ -218,6 +228,15 @@ class Polynomial {
                                    return p * x + a * x / static_cast<T>(m--);
                                });
     }
+
+    /**
+     * @brief The antiderivative vanishing at zero, spelled for Function1D.
+     *
+     * Named so that the free function Primitive() can find it through the
+     * Antidifferentiable1D concept.
+     * @param x Query abscissa.
+     */
+    T Antiderivative(T x) const { return Primitive(x); }
 
     /**
      * @brief Compatibility spelling for Primitive().

@@ -123,8 +123,14 @@ class Polynomial1D {
         return Polynomial1D(a);
     }
 
-    /** @brief Return the polynomial degree. */
-    auto Degree() const { return _a.size() - 1; }
+    /**
+     * @brief Return the polynomial degree.
+     *
+     * Signed deliberately: an unsigned `size() - 1` yields SIZE_MAX for an
+     * empty coefficient vector, and makes every loop over the coefficients a
+     * signed/unsigned comparison.
+     */
+    int Degree() const { return static_cast<int>(_a.size()) - 1; }
 
     /** @brief Evaluate the polynomial at `x` using Horner's method. */
     T operator()(T x) const {
@@ -214,7 +220,7 @@ class Polynomial1D {
     Polynomial1D<T> &operator+=(FLOAT b) {
         _a[0] += b;
         return *this;
-    };
+    }
 
     /** @brief Subtract a scalar from the constant coefficient. */
     template <typename FLOAT>
@@ -222,7 +228,7 @@ class Polynomial1D {
     Polynomial1D<T> &operator-=(FLOAT b) {
         _a[0] -= b;
         return *this;
-    };
+    }
 
     /** @brief Multiply every coefficient by a scalar. */
     template <typename FLOAT>
@@ -232,7 +238,7 @@ class Polynomial1D {
             _a[idx] *= b;
         };
         return *this;
-    };
+    }
 
     /** @brief Divide every coefficient by a nonzero scalar. */
     template <typename FLOAT>
@@ -242,7 +248,7 @@ class Polynomial1D {
             _a[idx] /= b;
         };
         return *this;
-    };
+    }
 
     /** @brief Add another polynomial coefficient-wise. */
     template <typename FLOAT>
@@ -259,7 +265,7 @@ class Polynomial1D {
             };
         };
         return *this;
-    };
+    }
 
     /** @brief Subtract another polynomial coefficient-wise. */
     template <typename FLOAT>
@@ -276,7 +282,7 @@ class Polynomial1D {
             };
         };
         return *this;
-    };
+    }
 
     /** @brief Multiply by another polynomial using coefficient convolution. */
     template <typename FLOAT>
@@ -293,7 +299,7 @@ class Polynomial1D {
         };
         this->_a = std::move(newcoeff);
         return *this;
-    };
+    }
 
     /**
      * @brief Write coefficients in ascending power order, separated by spaces.

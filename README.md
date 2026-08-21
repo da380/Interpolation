@@ -96,7 +96,7 @@ Git.
 - [Getting started](docs/getting-started.md)
 - [Interpolation methods](docs/interpolation-methods.md)
 - [Development and validation](docs/development.md)
-- [Implementation status](implementation_status.md)
+- [Rebuilding roadmap](docs/roadmap.md)
 
 ## Cubic-spline boundary conditions
 

@@ -113,8 +113,6 @@ Linear<xIter, yIter>::Derivative(const x_value_type x) const {
     auto x1 = _xS[i1];
     auto x2 = _xS[i2];
     auto h = x2 - x1;
-    auto a = (x2 - x) / h;
-    auto b = (x - x1) / h;
     return (_yS[i2] - _yS[i1]) / h;
 }
 

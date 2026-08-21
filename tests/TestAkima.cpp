@@ -37,7 +37,7 @@ ReferenceHermite(const std::vector<x_value_t> &x,
     return {value, derivative};
 }
 
-template <Interpolation::RealFloatingPoint real_t>
+template <Interpolation::Real real_t>
 void
 CheckComplexLinearFunction() {
     using Complex = std::complex<real_t>;

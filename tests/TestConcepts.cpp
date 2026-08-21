@@ -16,21 +16,20 @@ using ComplexIterator = std::vector<std::complex<double>>::iterator;
 using IntegerIterator = std::vector<int>::iterator;
 using ListIterator = std::list<double>::iterator;
 
-static_assert(Interpolation::RealFloatingPoint<float>);
-static_assert(Interpolation::RealFloatingPoint<double>);
-static_assert(!Interpolation::RealFloatingPoint<int>);
-static_assert(Interpolation::ComplexFloatingPoint<std::complex<double>>);
-static_assert(!Interpolation::ComplexFloatingPoint<double>);
-static_assert(Interpolation::RealOrComplexFloatingPoint<long double>);
-static_assert(
-    Interpolation::RealOrComplexFloatingPoint<std::complex<long double>>);
+static_assert(Interpolation::Real<float>);
+static_assert(Interpolation::Real<double>);
+static_assert(!Interpolation::Real<int>);
+static_assert(Interpolation::Complex<std::complex<double>>);
+static_assert(!Interpolation::Complex<double>);
+static_assert(Interpolation::RealOrComplex<long double>);
+static_assert(Interpolation::RealOrComplex<std::complex<long double>>);
 
-static_assert(Interpolation::RealFloatingPointIterator<RealIterator>);
-static_assert(Interpolation::RealFloatingPointIterator<ConstRealIterator>);
-static_assert(!Interpolation::RealFloatingPointIterator<ComplexIterator>);
-static_assert(!Interpolation::RealFloatingPointIterator<IntegerIterator>);
-static_assert(!Interpolation::RealFloatingPointIterator<ListIterator>);
-static_assert(Interpolation::ComplexFloatingPointIterator<ComplexIterator>);
+static_assert(Interpolation::RealIterator<RealIterator>);
+static_assert(Interpolation::RealIterator<ConstRealIterator>);
+static_assert(!Interpolation::RealIterator<ComplexIterator>);
+static_assert(!Interpolation::RealIterator<IntegerIterator>);
+static_assert(!Interpolation::RealIterator<ListIterator>);
+static_assert(Interpolation::ComplexIterator<ComplexIterator>);
 static_assert(
     Interpolation::InterpolationIteratorPair<RealIterator, RealIterator>);
 static_assert(

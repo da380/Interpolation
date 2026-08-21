@@ -8,8 +8,7 @@
 #include <random>
 #include <vector>
 
-template <Interpolation::RealFloatingPoint x_value_t,
-          Interpolation::RealOrComplexFloatingPoint y_value_t>
+template <Interpolation::Real x_value_t, Interpolation::RealOrComplex y_value_t>
 int
 LinearCheck() {
     using namespace Interpolation;

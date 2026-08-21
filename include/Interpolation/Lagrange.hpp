@@ -23,7 +23,7 @@ namespace Interpolation {
  * @tparam I Random-access iterator over real floating-point nodes.
  * @pre The range contains at least one strictly increasing node.
  */
-template <RealFloatingPointIterator I> class LagrangePolynomial {
+template <RealIterator I> class LagrangePolynomial {
   public:
     /** @brief Scalar type of the interpolation nodes. */
     using value_t = std::iter_value_t<I>;

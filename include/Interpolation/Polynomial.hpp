@@ -23,7 +23,7 @@ namespace Interpolation {
  * @tparam T Real or complex floating-point coefficient type.
  */
 template <typename T>
-    requires RealOrComplexFloatingPoint<T>
+    requires RealOrComplex<T>
 class Polynomial1D {
   public:
     /** @brief Scalar type used for coefficients and evaluation. */
@@ -91,14 +91,14 @@ class Polynomial1D {
      * @return Random polynomial of degree `n`.
      */
     static Polynomial1D Random(int n)
-        requires RealFloatingPoint<T>
+        requires Real<T>
     {
         std::random_device rd{};
         std::mt19937_64 gen{rd()};
         std::normal_distribution<T> d{};
         std::vector<T> a;
         std::generate_n(std::back_inserter(a), n + 1, [&]() {
-            if constexpr (RealFloatingPoint<T>) {
+            if constexpr (Real<T>) {
                 return d(gen);
             }
         });
@@ -112,7 +112,7 @@ class Polynomial1D {
      * @return Random polynomial of degree `n`.
      */
     static Polynomial1D Random(int n)
-        requires ComplexFloatingPoint<T>
+        requires Complex<T>
     {
         using S = typename T::value_type;
         std::random_device rd{};

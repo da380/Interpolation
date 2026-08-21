@@ -17,12 +17,46 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 # ---------------------------------------------------------------------------
+# Dependencies
+#
+# NumericConcepts is the library's only dependency: header-only, and used for
+# the Real / Complex / RealOrComplex vocabulary that the public concepts refine.
+# It publishes no release tags, so the pin is a commit.
+#
+# The package registry is excluded so that this never resolves from an
+# unrelated sibling project's build tree, which would make local builds depend
+# on directories outside this repository and diverge from CI.
+# ---------------------------------------------------------------------------
+find_package(NumericConcepts QUIET
+             NO_CMAKE_PACKAGE_REGISTRY
+             NO_CMAKE_SYSTEM_PACKAGE_REGISTRY)
+
+if(NOT NumericConcepts_FOUND)
+  include(FetchContent)
+  FetchContent_Declare(
+    NumericConcepts
+    GIT_REPOSITORY https://github.com/da380/NumericConcepts.git
+    GIT_TAG 888126b44a979fda5dcc9d0b11d80cb8b3f61b52
+    SYSTEM)
+  FetchContent_MakeAvailable(NumericConcepts)
+
+  # NumericConcepts creates the target "NumericConcepts" but no namespaced
+  # alias, so the usual spelling only exists once the package is installed and
+  # exported. Add it here so the link line is the same either way.
+  if(NOT TARGET NumericConcepts::NumericConcepts)
+    add_library(NumericConcepts::NumericConcepts ALIAS NumericConcepts)
+  endif()
+endif()
+
+# ---------------------------------------------------------------------------
 # The library
 # ---------------------------------------------------------------------------
 add_library(Interpolation INTERFACE)
 add_library(Interpolation::Interpolation ALIAS Interpolation)
 
 target_compile_features(Interpolation INTERFACE cxx_std_23)
+
+target_link_libraries(Interpolation INTERFACE NumericConcepts::NumericConcepts)
 
 target_include_directories(Interpolation INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

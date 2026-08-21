@@ -1,9 +1,6 @@
 #ifndef INTERPOLATION_AKIMA_SPLINE_HPP
 #define INTERPOLATION_AKIMA_SPLINE_HPP
 
-#include <Eigen/Core>
-#include <Eigen/IterativeLinearSolvers>
-#include <Eigen/SparseCore>
 #include <algorithm>
 #include <cassert>
 #include <cmath>

@@ -14,7 +14,7 @@ A rendered copy of this plan is published at
 | Decision | Choice |
 | --- | --- |
 | Language standard | C++23, excluding `std::expected` and `std::mdspan` |
-| Eigen | Removed entirely |
+| Eigen | Removed entirely (done, phase 2) |
 | Concepts | Adopt `da380/NumericConcepts`; delete the in-tree `Concepts.h` |
 | Function algebra | `Function1D` concept plus free operators; no CRTP base |
 | Dimensionality | 1D now, with seams cut so 2D adds API rather than breaking it |

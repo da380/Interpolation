@@ -30,8 +30,9 @@ second derivatives `M_i = S''(x_i)`.
 
 The three-argument constructor is Free/Free, commonly called a natural spline.
 Mixed Free/Clamped combinations are supported. The implementation assembles the
-lower triangle of a symmetric positive-definite system and solves it with
-`Eigen::SimplicialLDLT<..., Eigen::Lower>`.
+tridiagonal system for the nodal second derivatives and solves it with the
+Thomas algorithm, without pivoting, which is safe because the system is
+strictly diagonally dominant.
 
 Use a cubic spline for smooth material profiles or other data where continuous
 first and second derivatives matter. Exterior evaluation continues the first

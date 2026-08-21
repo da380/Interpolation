@@ -4,16 +4,29 @@
 
 Use an out-of-source directory. In-source builds are rejected by the project.
 
+Presets cover the usual configurations:
+
+```sh
+cmake --preset gcc-14
+cmake --build --preset gcc-14
+ctest --preset gcc-14
+```
+
+`clang-18`, `debug`, `asan` and `docs` are also available. Configuring by hand
+works too:
+
 ```sh
 cmake -S . -B build \
-  -DMY_PROJECT_BUILD_EXAMPLES=ON \
-  -DMY_PROJECT_BUILD_TESTS=ON
+  -DINTERPOLATION_BUILD_EXAMPLES=ON \
+  -DINTERPOLATION_BUILD_TESTS=ON
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-The top-level defaults enable examples and tests. When Interp is consumed with
-`add_subdirectory` or `FetchContent`, developer targets are not added.
+The top-level defaults enable examples and tests. When Interpolation is
+consumed with `add_subdirectory` or `FetchContent`, developer targets are not
+added. Pass `-DINTERPOLATION_WARNINGS_AS_ERRORS=ON` to reproduce the CI
+warning policy.
 
 ## API documentation
 
@@ -38,28 +51,14 @@ tree.
 - Do not regenerate expected numerical output merely because behavior changed;
   explain and review every oracle change.
 
-## Validate with Eigen 3.4.0
+## Continuous integration
 
-DSpecM1D consumes Eigen 3.4.0. Given an exact local Eigen source checkout and a
-local GoogleTest source checkout, configure without editing Interp's dependency
-declaration:
+CI builds the gcc-14 and clang-18 matrix across Release and Debug with
+warnings as errors, runs an ASan and UBSan job, checks formatting with
+clang-format 18, builds the documentation, and installs the package to verify
+that a separate consumer project can find it through `find_package`.
 
-```sh
-cmake -S . -B build-eigen-3.4 \
-  -DMY_PROJECT_BUILD_EXAMPLES=ON \
-  -DMY_PROJECT_BUILD_TESTS=ON \
-  -DINTERPOLATION_BUILD_DOCS=ON \
-  -DBUILD_TESTING=OFF \
-  -DFETCHCONTENT_SOURCE_DIR_EIGEN3=/path/to/eigen-3.4.0 \
-  -DFETCHCONTENT_SOURCE_DIR_GOOGLETEST=/path/to/googletest
-cmake --build build-eigen-3.4 --parallel
-cmake --build build-eigen-3.4 --target InterpolationDocs
-ctest --test-dir build-eigen-3.4 --output-on-failure
-```
-
-`BUILD_TESTING=OFF` prevents Eigen's own large test registry from being added;
-Interp still enables and registers its tests through `MY_PROJECT_BUILD_TESTS`.
+Reproduce any of these locally with the matching preset before pushing.
 
 Finish each phase with `git diff --check` and review `git status --short` to
-ensure generated files and unrelated repositories have not changed. Record the
-result in `implementation_status.md`.
+ensure generated files and unrelated repositories have not changed.

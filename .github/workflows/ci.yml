@@ -140,11 +140,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Eigen
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libeigen3-dev
-
       - name: Configure and install
         run: |
           cmake -S . -B build \
@@ -197,14 +192,22 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y doxygen
+          doxygen --version
 
-      - name: Build the documentation
+      - name: Configure
         run: |
           cmake -S . -B build \
             -DINTERPOLATION_BUILD_DOCS=ON \
             -DINTERPOLATION_BUILD_TESTS=OFF \
             -DINTERPOLATION_BUILD_EXAMPLES=OFF
-          cmake --build build --target InterpolationDocs
+
+      # Doxygen runs with WARN_AS_ERROR=FAIL_ON_WARNINGS, so any warning fails
+      # the job. Run it directly rather than through the CMake target so the
+      # warnings are the visible output rather than a build-tool error.
+      - name: Build the documentation
+        run: |
+          echo "Doxygen: $(doxygen --version)"
+          doxygen build/Doxyfile
 
       - name: Upload the documentation
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'

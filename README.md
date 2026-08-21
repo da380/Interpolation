@@ -3,7 +3,7 @@
 Interpolation is a C++23 header-only template library for one-dimensional
 interpolation and polynomial operations. Abscissae are real floating-point
 values; ordinates and polynomial coefficients may be real or complex where
-noted below. Eigen provides the linear algebra used by cubic splines.
+noted below. The library has no external dependencies.
 
 ## Available routines
 
@@ -24,9 +24,8 @@ use. Abscissae must be strictly increasing.
 
 - A C++23 compiler. GCC 14 and Clang 18 are the versions CI covers
 - CMake 3.24 or newer
-- Eigen. CMake uses an installed Eigen if it finds one and otherwise fetches
-  it. This dependency is being removed
-- Git access when CMake fetches Eigen or, for tests, GoogleTest
+- No external dependencies. Git access is needed only when CMake fetches
+  GoogleTest to build the tests
 - Doxygen 1.9 or newer only when building the API documentation
 
 The standard is carried on the exported target, so consumers do not need to
@@ -119,7 +118,8 @@ Git.
 derivative is zero. `CubicSplineBC::Clamped` specifies the endpoint first
 derivative.
 
-The coefficient solve uses `Eigen::SimplicialLDLT` on a symmetric
-positive-definite system stored through its lower triangle. Couplings adjacent
-to Free endpoints are eliminated because those endpoint second derivatives are
-known to be zero.
+The nodal second derivatives satisfy a tridiagonal system, which is solved
+directly by the Thomas algorithm. The system is strictly diagonally dominant,
+so no pivoting is required. Its coefficients are real even when the ordinates
+are complex, so a complex spline solves a real system against a complex
+right-hand side.

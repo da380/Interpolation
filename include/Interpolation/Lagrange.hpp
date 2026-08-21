@@ -1,7 +1,6 @@
 #ifndef INTERPOLATION_LAGRANGE_HPP
 #define INTERPOLATION_LAGRANGE_HPP
 
-#include <Eigen/Core>
 #include <algorithm>
 #include <cassert>
 #include <concepts>

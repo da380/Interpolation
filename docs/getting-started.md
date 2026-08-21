@@ -13,9 +13,9 @@ Each public forwarding header exposes one facility:
 | `<Interpolation/Polynomial.hpp>` | `Polynomial1D` |
 | `<Interpolation/Interpolation.hpp>` | All of the above and the public concepts |
 
-Interp is header-only. Link the CMake interface target `Interpolation` so the
-include directory, C++ standard, Eigen dependency, and transitive requirements
-are supplied consistently.
+Interpolation is header-only and has no external dependencies. Link the CMake
+interface target `Interpolation::Interpolation` so the include directory and
+the C++ standard are supplied consistently.
 
 ## Add Interp to a project
 

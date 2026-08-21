@@ -1,16 +1,15 @@
 #ifndef INTERPOLATION_CUBIC_SPLINE_HPP
 #define INTERPOLATION_CUBIC_SPLINE_HPP
 
-#include <Eigen/Core>
-#include <Eigen/SparseCholesky>
-#include <Eigen/SparseCore>
 #include <algorithm>
 #include <cassert>
-#include <iostream>
+#include <cstddef>
 #include <iterator>
+#include <span>
 #include <vector>
 
 #include <Interpolation/Concepts.hpp>
+#include <Interpolation/Tridiagonal.hpp>
 
 namespace Interpolation {
 
@@ -104,14 +103,11 @@ class CubicSpline {
     y_value_type Derivative(x_value_type x) const;
 
   private:
-    using Vector = Eigen::Matrix<y_value_type, Eigen::Dynamic, 1>;
-    using Matrix = Eigen::SparseMatrix<y_value_type>;
-
     xIter _xS; // Iterator to the start of the x-values.
-    xIter _xF; // Iterator to the end of hte x-values.
+    xIter _xF; // Iterator to the end of the x-values.
     yIter _yS; // Iterator to the start of the y-values.
 
-    Vector _ypp; // Cubic spline coefficients
+    std::vector<y_value_type> _ypp; // Second derivatives at the nodes.
 };
 
 // Definition of the main constructor.
@@ -121,75 +117,59 @@ CubicSpline<xIter, yIter>::CubicSpline(xIter xS, xIter xF, yIter yS,
                                        CubicSplineBC left, y_value_type ypl,
                                        CubicSplineBC right, y_value_type ypr)
     : _xS{xS}, _xF{xF}, _yS{yS} {
-    // Dimension of the linear system.
-    const auto n = std::distance(_xS, _xF);
+    const auto n = static_cast<std::size_t>(std::distance(_xS, _xF));
+    assert(n >= 2);
     assert(std::is_sorted(_xS, _xF));
 
-    // Set up the sparse matrix.
-    Matrix A(n, n);
-    A.reserve(Eigen::VectorXi::Constant(n, 3));
-
-    // set some constants
     constexpr auto oneThird =
         static_cast<x_value_type>(1) / static_cast<x_value_type>(3);
     constexpr auto oneSixth =
         static_cast<x_value_type>(1) / static_cast<x_value_type>(6);
 
-    // Store only the lower triangle consumed by SimplicialLDLT. A Free
-    // endpoint fixes its second derivative to zero, so the adjacent term can
-    // be eliminated from the neighbouring equation. Omitting that edge makes
-    // the full-size system symmetric without changing its solution.
-    for (int i = 0; i < n - 1; ++i) {
-        const bool adjacentToFreeLeft = i == 0 && left == CubicSplineBC::Free;
-        const bool adjacentToFreeRight =
-            i == n - 2 && right == CubicSplineBC::Free;
-        if (!adjacentToFreeLeft && !adjacentToFreeRight) {
-            A.insert(i + 1, i) = oneSixth * (_xS[i + 1] - _xS[i]);
-        }
+    // The system for the nodal second derivatives is tridiagonal, so it is
+    // assembled as three diagonals and solved directly. Its coefficients are
+    // real even when the ordinates are complex, so only the right-hand side
+    // carries the ordinate type.
+    //
+    // The right-hand side is built in _ypp, which the solve then overwrites
+    // with the solution.
+    std::vector<x_value_type> sub(n, 0), diag(n, 0), super(n, 0);
+    _ypp.assign(n, y_value_type{});
+
+    // Interior rows express continuity of the first derivative at each node.
+    for (std::size_t i = 1; i + 1 < n; ++i) {
+        const auto hPrev = _xS[i] - _xS[i - 1];
+        const auto hNext = _xS[i + 1] - _xS[i];
+        sub[i] = oneSixth * hPrev;
+        diag[i] = oneThird * (hPrev + hNext);
+        super[i] = oneSixth * hNext;
+        _ypp[i] = (_yS[i + 1] - _yS[i]) / hNext - (_yS[i] - _yS[i - 1]) / hPrev;
     }
 
-    // Add in the diagonal.
+    // Left endpoint. A Free condition states directly that the second
+    // derivative there is zero.
     if (left == CubicSplineBC::Free) {
-        A.insert(0, 0) = 1;
+        diag[0] = 1;
     } else {
-        A.insert(0, 0) = oneThird * (_xS[1] - _xS[0]);
+        const auto h = _xS[1] - _xS[0];
+        diag[0] = oneThird * h;
+        super[0] = oneSixth * h;
+        _ypp[0] = (_yS[1] - _yS[0]) / h - ypl;
     }
-    for (int i = 1; i < n - 1; ++i) {
-        A.insert(i, i) = oneThird * (_xS[i + 1] - _xS[i - 1]);
-    }
+
+    // Right endpoint.
     if (right == CubicSplineBC::Free) {
-        A.insert(n - 1, n - 1) = 1;
+        diag[n - 1] = 1;
     } else {
-        A.insert(n - 1, n - 1) = oneThird * (_xS[n - 1] - _xS[n - 2]);
+        const auto h = _xS[n - 1] - _xS[n - 2];
+        sub[n - 1] = oneSixth * h;
+        diag[n - 1] = oneThird * h;
+        _ypp[n - 1] = ypr - (_yS[n - 1] - _yS[n - 2]) / h;
     }
 
-    // Finalise the matrix construction.
-    A.makeCompressed();
-
-    // Set the right hand side.
-    Vector rhs(n);
-    if (left == CubicSplineBC::Free) {
-        rhs(0) = 0;
-    } else {
-        rhs(0) = (_yS[1] - _yS[0]) / (_xS[1] - _xS[0]) - ypl;
-    }
-    for (int i = 1; i < n - 1; i++) {
-        rhs(i) = (_yS[i + 1] - _yS[i]) / (_xS[i + 1] - _xS[i]) -
-                 (_yS[i] - _yS[i - 1]) / (_xS[i] - _xS[i - 1]);
-    }
-    if (right == CubicSplineBC::Free) {
-        rhs(n - 1) = 0;
-    } else {
-        rhs(n - 1) =
-            ypr - (_yS[n - 1] - _yS[n - 2]) / (_xS[n - 1] - _xS[n - 2]);
-    }
-
-    // Solve the linear system.
-    // A now stores the lower triangle of a symmetric positive-definite system.
-    Eigen::SimplicialLDLT<Matrix, Eigen::Lower> solver;
-    solver.compute(A);
-    _ypp = solver.solve(rhs);
-    assert(solver.info() == Eigen::Success);
+    Detail::SolveTridiagonal<x_value_type, y_value_type>(
+        std::span<const x_value_type>{sub}, std::span<x_value_type>{diag},
+        std::span<const x_value_type>{super}, std::span<y_value_type>{_ypp});
 }
 
 // Definition of the constructor for natural splines.
@@ -229,7 +209,7 @@ CubicSpline<xIter, yIter>::operator()(x_value_type x) const {
     auto a = (x2 - x) / h;
     auto b = (x - x1) / h;
     return a * _yS[i1] + b * _yS[i2] +
-           ((a * a * a - a) * _ypp(i1) + (b * b * b - b) * _ypp(i2)) * h * h *
+           ((a * a * a - a) * _ypp[i1] + (b * b * b - b) * _ypp[i2]) * h * h *
                oneSixth;
 };
 
@@ -257,7 +237,7 @@ CubicSpline<xIter, yIter>::Derivative(x_value_type x) const {
     auto b = (x - x1) / h;
     return (_yS[i2] - _yS[i1]) / h +
            oneSixth * h *
-               ((-3 * a * a + 1) * _ypp(i1) + (3 * b * b - 1) * _ypp(i2));
+               ((-3 * a * a + 1) * _ypp[i1] + (3 * b * b - 1) * _ypp[i2]);
 };
 
 } // namespace Interpolation

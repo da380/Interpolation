@@ -2,12 +2,15 @@
 #define INTERPOLATION_SAMPLES_HPP
 
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <string>
 
 #include <Interpolation/Concepts.hpp>
+#include <Interpolation/Tridiagonal.hpp>
 
 namespace Interpolation::Detail {
 
@@ -96,6 +99,109 @@ LocateSegment(const XRange &x, Real query) {
     return static_cast<std::size_t>(
                std::ranges::distance(std::ranges::begin(x), upper)) -
            1;
+}
+
+/**
+ * @brief Value or `N`th derivative of a linear piece.
+ *
+ * The piece spans `[0, h]` with end values `f0` and `f1`, evaluated at offset
+ * `t` from its left end. Shared by the one-dimensional interpolant and by the
+ * tensor-product grids, so the formula exists once.
+ */
+template <std::size_t N, typename Real, typename Scalar>
+constexpr Scalar
+LinearPiece(Real h, Real t, Scalar f0, Scalar f1) {
+    if constexpr (N > 1) {
+        return Scalar{};
+    } else if constexpr (N == 1) {
+        return (f1 - f0) / h;
+    } else {
+        const auto b = t / h;
+        const auto a = static_cast<Real>(1) - b;
+        return a * f0 + b * f1;
+    }
+}
+
+/**
+ * @brief Value or `N`th derivative of a cubic-spline piece.
+ *
+ * The piece spans `[0, h]` with end values `f0`, `f1` and end second
+ * derivatives `m0`, `m1`, evaluated at offset `t` from its left end. Pieces
+ * are cubic, so the third derivative is constant and higher orders vanish.
+ */
+template <std::size_t N, typename Real, typename Scalar>
+constexpr Scalar
+SplinePiece(Real h, Real t, Scalar f0, Scalar f1, Scalar m0, Scalar m1) {
+    if constexpr (N > 3) {
+        return Scalar{};
+    } else if constexpr (N == 3) {
+        return (m1 - m0) / h;
+    } else {
+        constexpr auto oneSixth = static_cast<Real>(1) / static_cast<Real>(6);
+        const auto b = t / h;
+        const auto a = static_cast<Real>(1) - b;
+
+        if constexpr (N == 2) {
+            return a * m0 + b * m1;
+        } else if constexpr (N == 1) {
+            return (f1 - f0) / h +
+                   oneSixth * h * ((1 - 3 * a * a) * m0 + (3 * b * b - 1) * m1);
+        } else {
+            return a * f0 + b * f1 +
+                   ((a * a * a - a) * m0 + (b * b * b - b) * m1) * h * h *
+                       oneSixth;
+        }
+    }
+}
+
+/**
+ * @brief Natural-spline second derivatives at the nodes.
+ *
+ * Solves the same tridiagonal system CubicSpline builds, with the natural
+ * condition at both ends, for a sequence of values sampled on `nodes`. It is
+ * factored out here because the tensor-product grid has to solve it once per
+ * row and once per column, and the caller supplies the scratch diagonals so
+ * that a whole grid costs one set of buffers rather than one per line.
+ *
+ * @param nodes Strictly increasing abscissae.
+ * @param values Sampled values, the same length as `nodes`.
+ * @param curvature Output, the same length as `nodes`.
+ * @param sub Scratch, the same length as `nodes`.
+ * @param diag Scratch, the same length as `nodes`.
+ * @param super Scratch, the same length as `nodes`.
+ */
+template <typename Real, typename Scalar>
+void
+NaturalCurvatures(std::span<const Real> nodes, std::span<const Scalar> values,
+                  std::span<Scalar> curvature, std::span<Real> sub,
+                  std::span<Real> diag, std::span<Real> super) {
+    const auto n = nodes.size();
+    assert(n >= 2);
+
+    constexpr auto oneThird = static_cast<Real>(1) / static_cast<Real>(3);
+    constexpr auto oneSixth = static_cast<Real>(1) / static_cast<Real>(6);
+
+    std::ranges::fill(sub, Real{});
+    std::ranges::fill(diag, Real{});
+    std::ranges::fill(super, Real{});
+    std::ranges::fill(curvature, Scalar{});
+
+    for (std::size_t i = 1; i + 1 < n; ++i) {
+        const auto hPrev = nodes[i] - nodes[i - 1];
+        const auto hNext = nodes[i + 1] - nodes[i];
+        sub[i] = oneSixth * hPrev;
+        diag[i] = oneThird * (hPrev + hNext);
+        super[i] = oneSixth * hNext;
+        curvature[i] = (values[i + 1] - values[i]) / hNext -
+                       (values[i] - values[i - 1]) / hPrev;
+    }
+
+    // The natural condition states directly that the end curvature is zero.
+    diag[0] = 1;
+    diag[n - 1] = 1;
+
+    SolveTridiagonal<Real, Scalar>(std::span<const Real>{sub}, diag,
+                                   std::span<const Real>{super}, curvature);
 }
 
 } // namespace Interpolation::Detail

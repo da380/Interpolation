@@ -65,19 +65,9 @@ class Linear {
      * @param x Query abscissa.
      */
     template <std::size_t N = 0> constexpr Scalar Evaluate(Real x) const {
-        if constexpr (N > 1) {
-            return Scalar{};
-        } else {
-            const auto i = Detail::LocateSegment(_x, x);
-            const auto h = _x[i + 1] - _x[i];
-            if constexpr (N == 1) {
-                return (_y[i + 1] - _y[i]) / h;
-            } else {
-                const auto a = (_x[i + 1] - x) / h;
-                const auto b = (x - _x[i]) / h;
-                return a * _y[i] + b * _y[i + 1];
-            }
-        }
+        const auto i = Detail::LocateSegment(_x, x);
+        return Detail::LinearPiece<N, Real, Scalar>(
+            _x[i + 1] - _x[i], x - _x[i], _y[i], _y[i + 1]);
     }
 
     /** @brief Evaluate the interpolant; the same as `Evaluate<0>`. */

@@ -137,3 +137,41 @@ cumulative integral once when the node is built, so an interpolator carries no
 antiderivative state unless one is asked for. A function with a closed-form
 antiderivative, such as `Polynomial`, provides it directly. `Lagrange` supports
 neither yet: it is a single global polynomial rather than a piecewise one.
+
+## Two dimensions
+
+`Bilinear` and `BicubicSpline` interpolate on a rectilinear grid, given two
+axes and a flat, row-major value range. Both are tensor products of the
+corresponding one-dimensional scheme, and both are built from the same segment
+formulas the one-dimensional classes use rather than restating them.
+
+Because a tensor product is separable, a mixed partial derivative is exactly
+the two one-dimensional rules applied in turn:
+
+\f[
+\frac{\partial^{n+m} S}{\partial x^n \partial y^m}
+  = B^{(m)}_y \left( B^{(n)}_x(\cdot) \right),
+\f]
+
+where \f$B_x\f$ and \f$B_y\f$ are the one-dimensional segment operators.
+
+For `BicubicSpline` the construction solves three sets of one-dimensional
+systems:
+
+- \f$M^x\f$, the second derivative in the first variable, one solve per column;
+- \f$M^y\f$, the second derivative in the second variable, one solve per row;
+- \f$M^{xy}\f$, the mixed fourth derivative, obtained by applying the
+  first-axis solve to \f$M^y\f$.
+
+That last one is what makes it a true tensor product rather than two
+independent one-dimensional fits. Evaluation then needs only the sixteen
+corner quantities of the containing cell and allocates nothing.
+
+The natural condition is applied on all four edges, which fixes the second
+derivative to zero there. In the interior the scheme is fourth order; near the
+boundary the natural condition contributes an \f$O(h^2)\f$ error, so the global
+worst-case error converges at second order. Measured on
+\f$\sin x \cos y\f$ over a 33 by 33 grid, the interior error is around
+\f$5\times 10^{-7}\f$ against \f$1.7\times 10^{-3}\f$ for bilinear on the
+same data. Not-a-knot end conditions would lift the boundary order and are the
+natural next improvement.

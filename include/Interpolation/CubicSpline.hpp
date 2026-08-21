@@ -88,36 +88,10 @@ class CubicSpline {
      * @param x Query abscissa.
      */
     template <std::size_t N = 0> Scalar Evaluate(Real x) const {
-        if constexpr (N > 3) {
-            return Scalar{};
-        } else {
-            constexpr auto oneSixth =
-                static_cast<Real>(1) / static_cast<Real>(6);
-
-            const auto i = Detail::LocateSegment(_x, x);
-            const auto h = _x[i + 1] - _x[i];
-
-            if constexpr (N == 3) {
-                return (_ypp[i + 1] - _ypp[i]) / h;
-            } else {
-                const auto a = (_x[i + 1] - x) / h;
-                const auto b = (x - _x[i]) / h;
-
-                if constexpr (N == 2) {
-                    return a * _ypp[i] + b * _ypp[i + 1];
-                } else if constexpr (N == 1) {
-                    return (_y[i + 1] - _y[i]) / h +
-                           oneSixth * h *
-                               ((1 - 3 * a * a) * _ypp[i] +
-                                (3 * b * b - 1) * _ypp[i + 1]);
-                } else {
-                    return a * _y[i] + b * _y[i + 1] +
-                           ((a * a * a - a) * _ypp[i] +
-                            (b * b * b - b) * _ypp[i + 1]) *
-                               h * h * oneSixth;
-                }
-            }
-        }
+        const auto i = Detail::LocateSegment(_x, x);
+        return Detail::SplinePiece<N, Real, Scalar>(_x[i + 1] - _x[i],
+                                                    x - _x[i], _y[i], _y[i + 1],
+                                                    _ypp[i], _ypp[i + 1]);
     }
 
     /** @brief Evaluate the spline; the same as `Evaluate<0>`. */

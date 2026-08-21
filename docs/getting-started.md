@@ -11,6 +11,10 @@ Each public forwarding header exposes one facility:
 | `<Interpolation/AkimaSpline.hpp>` | `AkimaSpline` |
 | `<Interpolation/Lagrange.hpp>` | `Lagrange`, `LagrangeBasis` |
 | `<Interpolation/Polynomial.hpp>` | `Polynomial` |
+| `<Interpolation/Bilinear.hpp>` | `Bilinear` |
+| `<Interpolation/BicubicSpline.hpp>` | `BicubicSpline` |
+| `<Interpolation/Grid.hpp>` | `Extents`, `Extents2D`, `Grid2DView` |
+| `<Interpolation/Function.hpp>` | `Function1D`, the operators, `Derivative`, `Compose`, `Primitive` |
 | `<Interpolation/Interpolation.hpp>` | All of the above and the public concepts |
 
 Interpolation is header-only and has no external dependencies. Link the CMake
@@ -62,6 +66,8 @@ composing several interpolators instead.
 | `Lagrange` | At least 1 node | Evaluates the global polynomial for any real query |
 | `LagrangeBasis` | At least 1 node | Evaluates the selected basis polynomial for any real query |
 | `Polynomial` | Defaults to zero; explicit input needs at least 1 coefficient | Evaluates for any supported scalar argument |
+| `Bilinear` | At least 2 nodes on each axis | Continues the nearest edge cell |
+| `BicubicSpline` | At least 2 nodes on each axis | Continues the nearest edge cell |
 
 ## Scalar types
 

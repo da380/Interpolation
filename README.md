@@ -16,7 +16,14 @@ noted below. The library has no external dependencies.
 | `LagrangeBasis` | Individual Lagrange cardinal basis functions | 1 node |
 | `Polynomial` | Polynomial evaluation, calculus, and arithmetic | Defaults to zero; otherwise 1 coefficient |
 
-Every one of these models the `Function1D` concept, which is what lets them be
+Two-dimensional interpolation on rectilinear grids:
+
+| Routine | Purpose | Minimum data |
+| --- | --- | --- |
+| `Bilinear` | Tensor-product linear interpolation on a grid | 2 nodes per axis |
+| `BicubicSpline` | Tensor-product cubic-spline interpolation on a grid | 2 nodes per axis |
+
+Every one of the one-dimensional routines models the `Function1D` concept, which is what lets them be
 combined arithmetically, differentiated, composed and integrated as functions
 rather than only evaluated at a point.
 
@@ -131,6 +138,35 @@ Use `<Interpolation/Linear.hpp>`, `<Interpolation/AkimaSpline.hpp>`,
 `<Interpolation/Lagrange.hpp>`, or `<Interpolation/Polynomial.hpp>` to include a
 single facility, and `<Interpolation/Interpolation.hpp>` for the complete
 public API.
+
+## Two dimensions
+
+`Bilinear` and `BicubicSpline` interpolate on a rectilinear grid: two axes and
+a flat, row-major value range, with element `(i, j)` at `i * size(y) + j`.
+
+```cpp
+#include <Interpolation/BicubicSpline.hpp>
+
+std::vector<double> x{0.0, 1.0, 2.0, 3.0};
+std::vector<double> y{0.0, 1.0, 2.0};
+std::vector<double> v(x.size() * y.size());   // row-major
+
+Interpolation::BicubicSpline s{x, y, v};
+
+double value = s(1.5, 0.5);
+double mixed = s.Evaluate<1, 1>(1.5, 0.5);    // d2/dx dy
+```
+
+`BicubicSpline` is a genuine tensor product, not a spline fitted line by line:
+the second derivatives in each variable and the mixed fourth derivative are all
+computed once at construction, so evaluation is two applications of the same
+segment formula the one-dimensional spline uses, and allocates nothing.
+
+The natural condition is applied on all four edges. That leaves an `O(h^2)`
+error in a band near the boundary, so the global worst-case error converges at
+second order even though the interior is fourth order. If edge accuracy
+matters for your data, sample a margin wider than the region you intend to
+use.
 
 ## Build, test, and document
 

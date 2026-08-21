@@ -220,6 +220,19 @@ API without breaking it again.
 
 **Exit:** 2D interpolation against analytic surfaces; 1D API unchanged.
 
+Status: done. `Extents<Rank>` and `Grid2DView` are the N-D seam, small enough
+to swap for `mdspan` when a toolchain provides it. `Bilinear` and
+`BicubicSpline` are tensor products built on the same segment formulas as the
+1D classes, which were factored into `Detail::LinearPiece` and
+`Detail::SplinePiece` so there is one implementation rather than two. The 1D
+API is untouched: the same expression from phase 3 evaluates to the same value
+against an install tree.
+
+Known limitation: the natural condition on all four edges leaves an O(h^2)
+error near the boundary, so global worst-case convergence is second order even
+though the interior is fourth. Not-a-knot conditions are the natural next
+step.
+
 ## Correctness items folded into the above
 
 - Compiling the headers with `-Wall -Wextra` surfaces two unused variables in

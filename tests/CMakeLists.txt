@@ -20,6 +20,7 @@ add_executable(Tests
                TestPolynomial.cpp
                TestRangeSemantics.cpp
                TestFunctionAlgebra.cpp
+               TestGrid2D.cpp
                AllocationCounter.cpp)
 
 target_link_libraries(Tests PRIVATE Interpolation::Interpolation gtest_main)

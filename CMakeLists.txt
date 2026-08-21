@@ -24,10 +24,16 @@ include(CMakePackageConfigHelpers)
 # never uses. Phase 2 replaces the solve with a Thomas algorithm and removes
 # the dependency entirely.
 # ---------------------------------------------------------------------------
+# No version is requested, deliberately. Eigen 3.4 installs a SameMajorVersion
+# version file that rejects any range spanning major versions, while Eigen 5
+# rejects a bare "3.4" as meaning 3.4.x only, so no single versioned request
+# satisfies both. Everything this library uses has been present since 3.3, and
+# the dependency goes away in phase 2 regardless.
+#
 # The package registry is excluded deliberately: it otherwise resolves Eigen3
 # from an unrelated sibling project's build tree, which makes local builds
 # depend on directories outside this repository and diverge from CI.
-find_package(Eigen3 3.4...<6 QUIET NO_MODULE
+find_package(Eigen3 QUIET NO_MODULE
              NO_CMAKE_PACKAGE_REGISTRY
              NO_CMAKE_SYSTEM_PACKAGE_REGISTRY)
 
@@ -109,12 +115,20 @@ if(PROJECT_IS_TOP_LEVEL)
   option(INTERPOLATION_BUILD_TESTS    "Build the test suite" ON)
   option(INTERPOLATION_BUILD_DOCS     "Build the Doxygen API documentation" OFF)
 
+  option(INTERPOLATION_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+
   # Warnings are enabled on our own targets rather than globally, so that
   # FetchContent dependencies are not held to them.
   if(MSVC)
     set(INTERPOLATION_WARNINGS /W4)
+    if(INTERPOLATION_WARNINGS_AS_ERRORS)
+      list(APPEND INTERPOLATION_WARNINGS /WX)
+    endif()
   else()
     set(INTERPOLATION_WARNINGS -Wall -Wextra -Wpedantic)
+    if(INTERPOLATION_WARNINGS_AS_ERRORS)
+      list(APPEND INTERPOLATION_WARNINGS -Werror)
+    endif()
   endif()
 
   if(INTERPOLATION_BUILD_EXAMPLES)

@@ -1,7 +1,3 @@
-# Phase 0 safety net: the existing test suite is the behavioural oracle for
-# the refactor, so it runs on every push and pull request before any header
-# is touched. Phase 1 replaces this with a compiler matrix, sanitiser jobs,
-# a format check and a documentation build.
 name: CI
 
 on:
@@ -14,23 +10,49 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  test:
-    name: Build and test
+  # ---------------------------------------------------------------------------
+  # The test suite is the behavioural oracle for the refactor. Warnings are
+  # errors here, but only on our own targets: dependencies are fetched SYSTEM
+  # so their headers are not held to our flags.
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: ${{ matrix.compiler }} (${{ matrix.build_type }})
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++-14, clang++-18]
+        build_type: [Release, Debug]
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install the compiler
+        run: |
+          sudo apt-get update
+          if [ "${{ matrix.compiler }}" = "g++-14" ]; then
+            sudo apt-get install -y g++-14
+          else
+            sudo apt-get install -y clang-18
+          fi
 
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
         with:
           path: build/_deps
-          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'tests/CMakeLists.txt') }}
-          restore-keys: deps-${{ runner.os }}-
+          key: deps-${{ matrix.compiler }}-${{ hashFiles('CMakeLists.txt', 'tests/CMakeLists.txt') }}
+          restore-keys: deps-${{ matrix.compiler }}-
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        run: >
+          cmake -S . -B build
+          -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DINTERPOLATION_WARNINGS_AS_ERRORS=ON
 
       - name: Build
         run: cmake --build build -j"$(nproc)"
@@ -38,11 +60,170 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+      # The suite is 34 tests in Release and 35 in Debug: Akima's death test
+      # checks an assert, which compiles out under NDEBUG. Phase 2 turns these
+      # preconditions into thrown exceptions, at which point the counts match.
       - name: Check the oracle is intact
         run: |
+          expected=34
+          if [ "${{ matrix.build_type }}" = "Debug" ]; then expected=35; fi
           count=$(ctest --test-dir build -N | sed -n 's/^Total Tests: //p')
-          echo "Discovered $count tests (baseline is 34)."
-          if [ "$count" -lt 34 ]; then
-            echo "::error::Test count fell below the phase 0 baseline of 34."
+          echo "Discovered $count tests, expected at least $expected."
+          if [ "$count" -lt "$expected" ]; then
+            echo "::error::Test count $count fell below the baseline of $expected."
             exit 1
           fi
+
+  # ---------------------------------------------------------------------------
+  # Sanitisers. Debug so that the assert-based preconditions are live, and
+  # -fno-sanitize-recover so a report fails the job rather than being logged.
+  # ---------------------------------------------------------------------------
+  sanitizers:
+    name: ASan and UBSan
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_CXX_COMPILER=g++-14
+          -DCMAKE_BUILD_TYPE=Debug
+          -DINTERPOLATION_WARNINGS_AS_ERRORS=ON
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: ctest --test-dir build --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # Formatting, pinned to clang-format 18 to match .clang-format.
+  # ---------------------------------------------------------------------------
+  format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format 18
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-18
+
+      - name: Check formatting
+        run: |
+          mapfile -t files < <(find include tests examples \
+            -type f \( -name '*.hpp' -o -name '*.h' -o -name '*.cpp' \) | sort)
+          printf 'Checking %d files.\n' "${#files[@]}"
+          clang-format-18 --dry-run --Werror --style=file "${files[@]}"
+
+  # ---------------------------------------------------------------------------
+  # The install tree is part of the public interface, so it is exercised the
+  # way a consumer would: install, then find_package from a separate project.
+  # ---------------------------------------------------------------------------
+  install:
+    name: find_package from an install tree
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Eigen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libeigen3-dev
+
+      - name: Configure and install
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/stage" \
+            -DINTERPOLATION_BUILD_TESTS=OFF \
+            -DINTERPOLATION_BUILD_EXAMPLES=OFF
+          cmake --install build
+
+      - name: Build a consumer against the install tree
+        run: |
+          mkdir -p consumer
+          cat > consumer/CMakeLists.txt <<'CMAKE'
+          cmake_minimum_required(VERSION 3.24)
+          project(Consumer LANGUAGES CXX)
+          find_package(Interpolation 0.1 REQUIRED)
+          add_executable(consumer main.cpp)
+          target_link_libraries(consumer PRIVATE Interpolation::Interpolation)
+          CMAKE
+          cat > consumer/main.cpp <<'CPP'
+          #include <Interpolation/Interpolation.hpp>
+          #include <cstdio>
+          #include <vector>
+
+          int main() {
+              std::vector<double> x{0.0, 1.0, 2.0, 3.0};
+              std::vector<double> y{0.0, 1.0, 4.0, 9.0};
+              Interpolation::CubicSpline s{x.begin(), x.end(), y.begin()};
+              std::printf("%.6f\n", s(1.5));
+              return 0;
+          }
+          CPP
+          cmake -S consumer -B consumer/build -DCMAKE_PREFIX_PATH="$PWD/stage"
+          cmake --build consumer/build
+          ./consumer/build/consumer
+
+  # ---------------------------------------------------------------------------
+  # Documentation is built on every run as a warnings-as-errors check.
+  # Publishing happens only from main, and needs Pages enabled on the
+  # repository with its source set to GitHub Actions.
+  # ---------------------------------------------------------------------------
+  docs:
+    name: Doxygen
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen
+
+      - name: Build the documentation
+        run: |
+          cmake -S . -B build \
+            -DINTERPOLATION_BUILD_DOCS=ON \
+            -DINTERPOLATION_BUILD_TESTS=OFF \
+            -DINTERPOLATION_BUILD_EXAMPLES=OFF
+          cmake --build build --target InterpolationDocs
+
+      - name: Upload the documentation
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/docs/html
+
+  deploy-docs:
+    name: Publish documentation
+    needs: docs
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -31,7 +31,7 @@ TEST(Polynomial1D, DefaultConstructionIsZeroPolynomial) {
     EXPECT_EQ(zero.Degree(), 0);
     ExpectCoefficients(zero, std::vector<double>{0.0});
     InterpolationTest::ExpectScaledNear(zero(2.0), 0.0);
-    InterpolationTest::ExpectScaledNear(zero.Derivative(2.0), 0.0);
+    InterpolationTest::ExpectScaledNear(zero.template Evaluate<1>(2.0), 0.0);
     InterpolationTest::ExpectScaledNear(zero.Primitive(2.0), 0.0);
     InterpolationTest::ExpectScaledNear(zero.Integrate(-1.0, 2.0), 0.0);
     InterpolationTest::ExpectScaledNear(zero[0], 0.0);
@@ -60,7 +60,8 @@ TEST(Polynomial1D, EvaluationCalculusAndCoefficientAccess) {
 
     EXPECT_EQ(polynomial.Degree(), 2);
     InterpolationTest::ExpectScaledNear(polynomial(2.0), 9.0);
-    InterpolationTest::ExpectScaledNear(polynomial.Derivative(2.0), 10.0);
+    InterpolationTest::ExpectScaledNear(polynomial.template Evaluate<1>(2.0),
+                                        10.0);
     InterpolationTest::ExpectScaledNear(polynomial.Primitive(2.0), 6.0);
     InterpolationTest::ExpectScaledNear(polynomial.Integrate(-1.0, 2.0), 9.0);
 
@@ -127,8 +128,8 @@ TEST(Polynomial1D, ConversionComplexValuesAndStreamOutput) {
     const Complex query{2.0, 0.0};
     InterpolationTest::ExpectScaledNear(complexPolynomial(query),
                                         Complex{5.0, 0.0});
-    InterpolationTest::ExpectScaledNear(complexPolynomial.Derivative(query),
-                                        Complex{2.0, -1.0});
+    InterpolationTest::ExpectScaledNear(
+        complexPolynomial.template Evaluate<1>(query), Complex{2.0, -1.0});
     InterpolationTest::ExpectScaledNear(complexPolynomial.Primitive(query),
                                         Complex{6.0, 2.0});
     InterpolationTest::ExpectScaledNear(

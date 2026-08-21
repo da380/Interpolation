@@ -15,7 +15,7 @@ A rendered copy of this plan is published at
 | --- | --- |
 | Language standard | C++23, excluding `std::expected` and `std::mdspan` |
 | Eigen | Removed entirely (done, phase 2) |
-| Concepts | Adopt `da380/NumericConcepts`; delete the in-tree `Concepts.h` |
+| Concepts | Adopt `da380/NumericConcepts`; delete the in-tree `Concepts.h` (done, phase 2) |
 | Function algebra | `Function1D` concept plus free operators; no CRTP base |
 | Dimensionality | 1D now, with seams cut so 2D adds API rather than breaking it |
 | Namespace | Stays `Interpolation`; the README prose changes to match |
@@ -180,6 +180,13 @@ operand's type, signed sizes, trailing-zero trimming so `Degree()` stops
 lying after a subtraction, and a seedable `Random`.
 
 **Exit:** no Eigen in the tree; ported tests green; `-Wall -Wextra` clean.
+
+Status: done except for the `Polynomial` cleanup and the benchmark harness.
+Eigen is gone, the concepts are a refinement over NumericConcepts, all four
+interpolators take ranges and expose `Evaluate<N>`, the three copies of the
+locate-and-clamp are one `Detail::LocateSegment`, `Lagrange` is barycentric,
+and construction validates by throwing. The suite is 43 tests and the Release
+and Debug counts now agree, because no precondition compiles out any more.
 
 ### Phase 3 - The function algebra
 

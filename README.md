@@ -11,14 +11,15 @@ noted below. The library has no external dependencies.
 | --- | --- | --- |
 | `Linear` | Piecewise-linear interpolation and derivative | 2 nodes |
 | `CubicSpline` | Smooth piecewise-cubic interpolation | 2 nodes |
-| `Akima` | Local piecewise-cubic interpolation for real or complex ordinates | 3 nodes |
+| `AkimaSpline` | Local piecewise-cubic interpolation for real or complex ordinates | 3 nodes |
 | `Lagrange` | Global polynomial interpolation of sampled values | 1 node |
-| `LagrangePolynomial` | Individual Lagrange cardinal basis functions | 1 node |
+| `LagrangeBasis` | Individual Lagrange cardinal basis functions | 1 node |
 | `Polynomial1D` | Polynomial evaluation, calculus, and arithmetic | Defaults to zero; otherwise 1 coefficient |
 
-All interpolators store iterators rather than copying their input. Keep the
-sample containers alive and do not reallocate them while an interpolator is in
-use. Abscissae must be strictly increasing.
+All interpolators take ranges. An lvalue container is borrowed, so it must
+outlive the interpolator and must not be reallocated; an rvalue is moved in
+and owned, so the interpolator can outlive its source. Abscissae must be
+strictly increasing, and this is enforced at construction.
 
 ## Requirements
 
@@ -70,16 +71,25 @@ projects.
 std::vector<double> x{0.0, 1.0, 3.0, 4.0};
 std::vector<double> y{0.0, 1.0, 0.0, 2.0};
 
-// Three arguments select a natural spline: S'' is zero at both endpoints.
-Interpolation::CubicSpline natural{x.begin(), x.end(), y.begin()};
-double value = natural(2.0);
-double derivative = natural.Derivative(2.0);
+// Two ranges select a natural spline: S'' is zero at both endpoints.
+// Passing lvalues borrows them; the containers must outlive the spline.
+Interpolation::CubicSpline natural{x, y};
+double value = natural(2.0);            // the same as natural.Evaluate<0>(2.0)
+double derivative = natural.Evaluate<1>(2.0);
 
 // Clamped conditions specify the endpoint first derivatives.
 Interpolation::CubicSpline clamped{
-    x.begin(), x.end(), y.begin(), Interpolation::CubicSplineBC::Clamped,
-    -0.5, 1.25};
+    x, y, Interpolation::BoundaryCondition::Clamped, -0.5, 1.25};
+
+// Passing rvalues moves the data in, so the spline owns it and can be
+// returned from a function or outlive its source. Do this last: it leaves
+// x and y moved-from.
+Interpolation::CubicSpline owning{std::move(x), std::move(y)};
 ```
+
+Construction throws `std::invalid_argument` if the two ranges differ in
+length, are too short for the method, or the abscissae are not strictly
+increasing.
 
 Use `<Interpolation/Linear.hpp>`, `<Interpolation/AkimaSpline.hpp>`,
 `<Interpolation/Lagrange.hpp>`, or `<Interpolation/Polynomial.hpp>` to include a
@@ -114,9 +124,8 @@ Git.
 
 ## Cubic-spline boundary conditions
 
-`CubicSplineBC::Free` is the natural boundary condition: the endpoint second
-derivative is zero. `CubicSplineBC::Clamped` specifies the endpoint first
-derivative.
+`BoundaryCondition::Natural` sets the endpoint second derivative to zero.
+`BoundaryCondition::Clamped` specifies the endpoint first derivative.
 
 The nodal second derivatives satisfy a tridiagonal system, which is solved
 directly by the Thomas algorithm. The system is strictly diagonally dominant,

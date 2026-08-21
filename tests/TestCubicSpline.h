@@ -43,12 +43,13 @@ CubicSplineCheck() {
 
     // Set the y-values
     std::vector<y_value_t> y;
-    std::transform(x.begin(), x.end(), std::back_inserter(y),
-                   [&](auto x) { return p(x); });
+    std::ranges::transform(x, std::back_inserter(y),
+                           [&](auto x) { return p(x); });
 
     // Form the interpolating function.
-    auto f = CubicSpline(x.begin(), x.end(), y.begin(), CubicSplineBC::Clamped,
-                         p.Derivative(x1), p.Derivative(x2));
+    auto f =
+        CubicSpline(x, y, BoundaryCondition::Clamped,
+                    p.template Evaluate<1>(x1), p.template Evaluate<1>(x2));
 
     // Compare exact and interpolated values at randomly sampled points
     std::uniform_real_distribution<x_value_t> xDist{x1, x2};
@@ -59,7 +60,7 @@ CubicSplineCheck() {
         auto xx = xDist(gen);
         x_value_t functionError = std::abs(f(xx) - p(xx));
         x_value_t derivativeError =
-            std::abs(f.Derivative(xx) - p.Derivative(xx));
+            std::abs(f.template Evaluate<1>(xx) - p.template Evaluate<1>(xx));
         if (functionError > eps)
             return 1;
         if (derivativeError > eps)
@@ -123,7 +124,7 @@ SolveDense(std::vector<std::vector<y_value_t>> a, std::vector<y_value_t> b) {
 
 template <typename y_value_t> class DenseReferenceSpline {
   public:
-    using BC = Interpolation::CubicSplineBC;
+    using BC = Interpolation::BoundaryCondition;
     using Vector = std::vector<y_value_t>;
     using Matrix = std::vector<std::vector<y_value_t>>;
 
@@ -135,7 +136,7 @@ template <typename y_value_t> class DenseReferenceSpline {
         Matrix matrix(n, Vector(n, y_value_t{}));
         Vector rhs(n, y_value_t{});
 
-        if (left == BC::Free) {
+        if (left == BC::Natural) {
             matrix[0][0] = 1;
         } else {
             const auto h = x_[1] - x_[0];
@@ -153,7 +154,7 @@ template <typename y_value_t> class DenseReferenceSpline {
             rhs[i] = (y_[i + 1] - y_[i]) / hNext - (y_[i] - y_[i - 1]) / hPrev;
         }
 
-        if (right == BC::Free) {
+        if (right == BC::Natural) {
             matrix[n - 1][n - 1] = 1;
         } else {
             const auto h = x_[n - 1] - x_[n - 2];
@@ -176,7 +177,18 @@ template <typename y_value_t> class DenseReferenceSpline {
                    h * h / 6.0;
     }
 
-    y_value_t Derivative(double value) const {
+    // Mirrors the Evaluate<N> spelling of the class under test, so the two
+    // can be driven by the same test code.
+    template <std::size_t N = 0> y_value_t Evaluate(double value) const {
+        static_assert(N <= 1, "reference spline provides value and slope only");
+        if constexpr (N == 1) {
+            return Slope(value);
+        } else {
+            return (*this)(value);
+        }
+    }
+
+    y_value_t Slope(double value) const {
         const auto [lower, upper] = interval(value);
         const auto h = x_[upper] - x_[lower];
         const auto a = (x_[upper] - value) / h;
@@ -191,7 +203,7 @@ template <typename y_value_t> class DenseReferenceSpline {
 
   private:
     std::pair<std::ptrdiff_t, std::ptrdiff_t> interval(double value) const {
-        auto iter = std::upper_bound(x_.begin(), x_.end(), value);
+        auto iter = std::ranges::upper_bound(x_, value);
         if (iter == x_.begin())
             ++iter;
         if (iter == x_.end())
@@ -213,8 +225,8 @@ RecoverIntervalSecondDerivatives(const spline_t &spline, double xLower,
                                  const y_value_t &yUpper) {
     const auto h = xUpper - xLower;
     const auto slope = (yUpper - yLower) / h;
-    const auto a = 6.0 * (slope - spline.Derivative(xLower)) / h;
-    const auto b = 6.0 * (spline.Derivative(xUpper) - slope) / h;
+    const auto a = 6.0 * (slope - spline.template Evaluate<1>(xLower)) / h;
+    const auto b = 6.0 * (spline.template Evaluate<1>(xUpper) - slope) / h;
     return {(2.0 * a - b) / 3.0, (2.0 * b - a) / 3.0};
 }
 

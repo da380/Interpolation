@@ -24,8 +24,8 @@ important than derivative continuity.
 continuous first and second derivatives. The solved unknowns are the knot
 second derivatives `M_i = S''(x_i)`.
 
-- `CubicSplineBC::Free` means `M=0` at that endpoint.
-- `CubicSplineBC::Clamped` means `S'` at that endpoint equals the supplied
+- `BoundaryCondition::Natural` means `M=0` at that endpoint.
+- `BoundaryCondition::Clamped` means `S'` at that endpoint equals the supplied
   derivative.
 
 The three-argument constructor is Free/Free, commonly called a natural spline.
@@ -41,7 +41,7 @@ extrapolation model.
 
 ## Akima interpolation
 
-`Akima` creates cubic Hermite pieces whose knot derivatives are weighted from
+`AkimaSpline` creates cubic Hermite pieces whose knot derivatives are weighted from
 neighboring secant slopes. It is local and can reduce oscillation around abrupt
 changes compared with a global polynomial.
 
@@ -49,13 +49,13 @@ The implementation requires at least three nodes. At an interior knot it
 selects the interval to the right; at the final knot it selects the final
 interval. Exterior queries continue the first or final cubic piece. These
 continuations are numerical extrapolations, not physically constrained models.
-`Derivative` is the canonical derivative method; `deriv` remains as a
-deprecated compatibility alias. Real magnitude weights allow both real and
-complex ordinates.
+`Evaluate<N>` gives the value at `N = 0` and derivatives above that; the
+pieces are cubic, so `Evaluate<3>` is piecewise constant and higher orders are
+zero. Real magnitude weights allow both real and complex ordinates.
 
 ## Lagrange interpolation
 
-For distinct nodes, `LagrangePolynomial` evaluates the cardinal basis
+For distinct nodes, `LagrangeBasis` evaluates the cardinal basis
 
 \f[
 \ell_i(x)=\prod_{j\ne i}\frac{x-x_j}{x_i-x_j}.
@@ -67,6 +67,28 @@ The basis satisfies `ell_i(x_j) = delta_ij` and its basis functions sum to one.
 \f[
 p(x)=\sum_i y_i\ell_i(x).
 \f]
+
+It is not evaluated from that product form. The implementation stores the
+barycentric weights
+
+\f[
+w_j=\frac{1}{\prod_{k\ne j}(x_j-x_k)},
+\f]
+
+computed once at construction in \f$O(n^2)\f$, and evaluates the second
+barycentric formula
+
+\f[
+p(x)=\left.\sum_j \frac{w_j y_j}{x-x_j}\middle/\sum_j \frac{w_j}{x-x_j}\right.
+\f]
+
+in \f$O(n)\f$ per query. Evaluating the products directly instead costs
+\f$O(n^2)\f$ per value and \f$O(n^3)\f$ per derivative, recomputing the same
+denominators every time.
+
+A query that lands exactly on a node makes the quotient `0/0`, so those cases
+are handled separately: the value is the sampled ordinate, and the derivative
+uses the standard node formulas.
 
 With `n` nodes, the result exactly represents polynomials of degree at most
 `n-1`, apart from floating-point rounding. Evaluation is global: every sample

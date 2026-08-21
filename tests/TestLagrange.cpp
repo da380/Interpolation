@@ -6,9 +6,9 @@
 
 #include "TestUtilities.h"
 
-TEST(LagrangePolynomial, CardinalValuesPartitionAndDerivatives) {
+TEST(LagrangeBasis, CardinalValuesPartitionAndDerivatives) {
     const std::vector<double> nodes{-1.0, 0.5, 2.0};
-    const Interpolation::LagrangePolynomial basis{nodes.begin(), nodes.end()};
+    const Interpolation::LagrangeBasis basis{nodes};
 
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
@@ -31,28 +31,30 @@ TEST(LagrangePolynomial, CardinalValuesPartitionAndDerivatives) {
         InterpolationTest::ExpectScaledNear(basis(0, query), expected0);
         InterpolationTest::ExpectScaledNear(basis(1, query), expected1);
         InterpolationTest::ExpectScaledNear(basis(2, query), expected2);
-        InterpolationTest::ExpectScaledNear(basis.Derivative(0, query),
-                                            derivative0);
-        InterpolationTest::ExpectScaledNear(basis.Derivative(1, query),
-                                            derivative1);
-        InterpolationTest::ExpectScaledNear(basis.Derivative(2, query),
-                                            derivative2);
+        InterpolationTest::ExpectScaledNear(
+            basis.template Evaluate<1>(0, query), derivative0);
+        InterpolationTest::ExpectScaledNear(
+            basis.template Evaluate<1>(1, query), derivative1);
+        InterpolationTest::ExpectScaledNear(
+            basis.template Evaluate<1>(2, query), derivative2);
         InterpolationTest::ExpectScaledNear(
             basis(0, query) + basis(1, query) + basis(2, query), 1.0);
-        InterpolationTest::ExpectScaledNear(basis.Derivative(0, query) +
-                                                basis.Derivative(1, query) +
-                                                basis.Derivative(2, query),
-                                            0.0);
+        InterpolationTest::ExpectScaledNear(
+            basis.template Evaluate<1>(0, query) +
+                basis.template Evaluate<1>(1, query) +
+                basis.template Evaluate<1>(2, query),
+            0.0);
     }
 }
 
-TEST(LagrangePolynomial, OneNodeBasisIsConstant) {
+TEST(LagrangeBasis, OneNodeBasisIsConstant) {
     const std::vector<double> nodes{2.0};
-    const Interpolation::LagrangePolynomial basis{nodes.begin(), nodes.end()};
+    const Interpolation::LagrangeBasis basis{nodes};
 
     for (const double query : {-3.0, 2.0, 8.0}) {
         InterpolationTest::ExpectScaledNear(basis(0, query), 1.0);
-        InterpolationTest::ExpectScaledNear(basis.Derivative(0, query), 0.0);
+        InterpolationTest::ExpectScaledNear(
+            basis.template Evaluate<1>(0, query), 0.0);
     }
 }
 
@@ -70,14 +72,14 @@ TEST(Lagrange, NonuniformRealPolynomialAndDerivativeAreRecovered) {
     for (const auto value : x) {
         y.push_back(polynomial(value));
     }
-    const Interpolation::Lagrange interpolant{x.begin(), x.end(), y.begin()};
+    const Interpolation::Lagrange interpolant{x, y};
 
     for (const double query : {-2.0, -1.0, 0.5, 2.0, 3.0, 4.0, 5.0}) {
         SCOPED_TRACE(query);
         InterpolationTest::ExpectScaledNear(interpolant(query),
                                             polynomial(query));
-        InterpolationTest::ExpectScaledNear(interpolant.Derivative(query),
-                                            derivative(query));
+        InterpolationTest::ExpectScaledNear(
+            interpolant.template Evaluate<1>(query), derivative(query));
     }
 }
 
@@ -96,13 +98,13 @@ TEST(Lagrange, ComplexPolynomialAndDerivativeAreRecovered) {
     for (const auto value : x) {
         y.push_back(polynomial(value));
     }
-    const Interpolation::Lagrange interpolant{x.begin(), x.end(), y.begin()};
+    const Interpolation::Lagrange interpolant{x, y};
 
     for (const double query : {-2.0, -1.0, 0.5, 3.0, 5.0}) {
         SCOPED_TRACE(query);
         InterpolationTest::ExpectScaledNear(interpolant(query),
                                             polynomial(query));
-        InterpolationTest::ExpectScaledNear(interpolant.Derivative(query),
-                                            derivative(query));
+        InterpolationTest::ExpectScaledNear(
+            interpolant.template Evaluate<1>(query), derivative(query));
     }
 }

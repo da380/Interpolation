@@ -6,6 +6,7 @@
 #include <Interpolation/Lagrange.hpp>
 #include <Interpolation/Linear.hpp>
 #include <Interpolation/Polynomial.hpp>
+#include <NumericConcepts/Ranges.hpp>
 #include <complex>
 #include <list>
 #include <vector>
@@ -38,5 +39,25 @@ static_assert(!Interpolation::InterpolationIteratorPair<ComplexIterator,
                                                         ComplexIterator>);
 static_assert(
     !Interpolation::InterpolationIteratorPair<IntegerIterator, RealIterator>);
+
+// The range concepts are refinements, not adoptions: NumericConcepts requires
+// only an input_range, while interpolation needs random access and a size.
+static_assert(Interpolation::RealRange<std::vector<double>>);
+static_assert(
+    Interpolation::RealOrComplexRange<std::vector<std::complex<double>>>);
+static_assert(!Interpolation::RealRange<std::vector<int>>);
+static_assert(!Interpolation::RealRange<std::list<double>>);
+static_assert(NumericConcepts::RealRange<std::list<double>>,
+              "the underlying concept should accept a list; ours should not");
+
+static_assert(Interpolation::InterpolationRanges<std::vector<double>,
+                                                 std::vector<double>>);
+static_assert(Interpolation::InterpolationRanges<
+              std::vector<double>, std::vector<std::complex<double>>>);
+static_assert(
+    !Interpolation::InterpolationRanges<std::vector<std::complex<double>>,
+                                        std::vector<std::complex<double>>>);
+static_assert(
+    !Interpolation::InterpolationRanges<std::vector<int>, std::vector<double>>);
 
 TEST(ConceptsAndHeaders, PublicForwardingHeadersCompileTogether) { SUCCEED(); }

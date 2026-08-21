@@ -1,169 +1,132 @@
 #ifndef INTERPOLATION_AKIMA_SPLINE_HPP
 #define INTERPOLATION_AKIMA_SPLINE_HPP
 
-#include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <cstddef>
-#include <iterator>
+#include <ranges>
+#include <utility>
 #include <vector>
 
 #include <Interpolation/Concepts.hpp>
+#include <Interpolation/Samples.hpp>
 
 namespace Interpolation {
 
 /**
  * @brief Piecewise-cubic interpolation using locally weighted secant slopes.
  *
- * The object stores iterators rather than copying the samples. The referenced
- * containers must remain alive and must not be reallocated while the
- * interpolator is in use.
+ * Construction takes ranges, borrowing lvalues and owning rvalues. Queries
+ * outside the sample interval continue the first or final cubic piece.
  *
- * @tparam xIter Random-access iterator over real abscissae.
- * @tparam yIter Random-access iterator over real or complex ordinates.
- * @pre The abscissa range contains at least three strictly increasing values.
- * Queries outside the sample interval are extrapolated using the first or
- * final cubic segment.
+ * @tparam XView View over real abscissae.
+ * @tparam YView View over real or complex ordinates.
  */
-template <typename xIter, typename yIter>
-    requires InterpolationIteratorPair<xIter, yIter>
-class Akima {
+template <typename XView, typename YView>
+    requires InterpolationRanges<XView, YView> && std::ranges::view<XView> &&
+             std::ranges::view<YView>
+class AkimaSpline {
   public:
-    /** @brief Scalar type used for abscissae. */
-    using x_value_type = std::iter_value_t<xIter>;
-    /** @brief Scalar type used for interpolated values. */
-    using y_value_type = std::iter_value_t<yIter>;
+    /** @brief Abscissa precision. */
+    using Real = std::ranges::range_value_t<XView>;
+    /** @brief Ordinate type, real or complex. */
+    using Scalar = std::ranges::range_value_t<YView>;
 
     /**
-     * @brief Construct an interpolator over non-owning sample ranges.
-     * @param xStart Iterator to the first abscissa.
-     * @param xFinish Iterator one past the final abscissa.
-     * @param yStart Iterator to the ordinate corresponding to `xStart`.
+     * @brief Construct from abscissa and ordinate ranges.
+     * @param x Strictly increasing abscissae, at least three.
+     * @param y Ordinates, the same length as `x`.
+     * @throws std::invalid_argument if the ranges differ in length, are too
+     *         short, or the abscissae are not strictly increasing.
      */
-    Akima(xIter xStart, xIter xFinish, yIter yStart);
-
-    /**
-     * @brief Evaluate the piecewise-cubic interpolant.
-     * @param x Query abscissa.
-     * @return Interpolated or extrapolated ordinate.
-     */
-    y_value_type operator()(x_value_type x) const;
-
-    /**
-     * @brief Evaluate the first derivative of the interpolant.
-     * @param x Query abscissa.
-     * @return First derivative at `x`.
-     */
-    y_value_type Derivative(x_value_type x) const;
-
-    /**
-     * @brief Compatibility spelling for Derivative().
-     * @param x Query abscissa.
-     * @return First derivative at `x`.
-     * @deprecated Use Derivative().
-     */
-    [[deprecated("Use Derivative()")]] y_value_type
-    deriv(x_value_type x) const {
-        return Derivative(x);
+    AkimaSpline(XView x, YView y) : _x{std::move(x)}, _y{std::move(y)} {
+        Detail::ValidateSamples(_x, _y, 3, "AkimaSpline");
+        ComputeSlopes();
     }
 
-  private:
-    // Iterators to the function data.
-    xIter _xS;
-    xIter _xF;
-    yIter _yS;
-
-    // m and s values
-    std::vector<y_value_type> m;
-    std::vector<y_value_type> s;
-
-    std::ptrdiff_t intervalIndex(x_value_type x) const;
-};
-
-template <typename xIter, typename yIter>
-    requires InterpolationIteratorPair<xIter, yIter>
-Akima<xIter, yIter>::Akima(xIter xS, xIter xF, yIter yS)
-    : _xS{xS}, _xF{xF}, _yS{yS} {
-    // Dimension of the linear system.
-    const auto n = std::distance(_xS, _xF);
-    assert(n > 2);
-    assert(std::is_sorted(_xS, _xF));
-
-    // fill out m
-    m.reserve(n - 1);
-    for (int i = 0; i < n - 1; ++i) {
-        m.push_back((_yS[i + 1] - _yS[i]) / (_xS[i + 1] - _xS[i]));
+    /** @brief Number of interpolation nodes. */
+    std::size_t Size() const {
+        return static_cast<std::size_t>(std::ranges::size(_x));
     }
 
-    // fill out s
-    using weight_type = decltype(std::abs(y_value_type{}));
-    constexpr auto oneHalf = static_cast<weight_type>(0.5);
-    s.reserve(n);
-    s.push_back(m[0]);
-    s.push_back((m[0] + m[1]) * oneHalf);
-    for (int i = 2; i < n - 2; ++i) {
-        const auto a = std::abs(m[i + 1] - m[i]);
-        const auto b = std::abs(m[i - 1] - m[i - 2]);
-        const auto weightSum = a + b;
-        if (weightSum == weight_type{}) {
-            s.push_back((m[i - 1] + m[i]) * oneHalf);
+    /**
+     * @brief Evaluate the interpolant or its `N`th derivative.
+     *
+     * The pieces are cubic, so derivatives of order four and above are
+     * identically zero and the third is piecewise constant.
+     *
+     * @tparam N Derivative order; `0` is the value itself.
+     * @param x Query abscissa.
+     */
+    template <std::size_t N = 0> Scalar Evaluate(Real x) const {
+        if constexpr (N > 3) {
+            return Scalar{};
         } else {
-            s.push_back((a * m[i - 1] + b * m[i]) / weightSum);
+            const auto i = Detail::LocateSegment(_x, x);
+            const auto h = _x[i + 1] - _x[i];
+            const auto t = x - _x[i];
+
+            const auto two = static_cast<Scalar>(2);
+            const auto three = static_cast<Scalar>(3);
+            const auto c = (three * _m[i] - two * _s[i] - _s[i + 1]) / h;
+            const auto d = (_s[i] + _s[i + 1] - two * _m[i]) / (h * h);
+
+            if constexpr (N == 3) {
+                return static_cast<Scalar>(6) * d;
+            } else if constexpr (N == 2) {
+                return two * c + static_cast<Scalar>(6) * d * t;
+            } else if constexpr (N == 1) {
+                return _s[i] + t * (two * c + three * d * t);
+            } else {
+                return _y[i] + t * (_s[i] + t * (c + d * t));
+            }
         }
     }
-    if (n > 3) {
-        s.push_back((m[n - 3] + m[n - 2]) * oneHalf);
-    }
-    s.push_back(m[n - 2]);
-}
 
-template <typename xIter, typename yIter>
-    requires InterpolationIteratorPair<xIter, yIter>
-std::ptrdiff_t
-Akima<xIter, yIter>::intervalIndex(x_value_type x) const {
-    const auto upper = std::upper_bound(_xS, _xF, x);
-    if (upper == _xS) {
-        return 0;
-    }
-    if (upper == _xF) {
-        return std::distance(_xS, _xF) - 2;
-    }
-    return std::distance(_xS, upper) - 1;
-}
+    /** @brief Evaluate the interpolant; the same as `Evaluate<0>`. */
+    Scalar operator()(Real x) const { return Evaluate<0>(x); }
 
-template <typename xIter, typename yIter>
-    requires InterpolationIteratorPair<xIter, yIter>
-Akima<xIter, yIter>::y_value_type
-Akima<xIter, yIter>::operator()(x_value_type x) const {
-    const auto i = intervalIndex(x);
-    const auto h = _xS[i + 1] - _xS[i];
-    const auto offset = x - _xS[i];
-    const auto a = _yS[i];
-    const auto b = s[i];
-    const auto c = (static_cast<y_value_type>(3) * m[i] -
-                    static_cast<y_value_type>(2) * s[i] - s[i + 1]) /
-                   h;
-    const auto d =
-        (s[i] + s[i + 1] - static_cast<y_value_type>(2) * m[i]) / (h * h);
-    return a + offset * (b + offset * (c + d * offset));
-}
+  private:
+    XView _x;
+    YView _y;
+    std::vector<Scalar> _m; // Secant slopes, one per segment.
+    std::vector<Scalar> _s; // Akima-weighted slopes, one per node.
 
-template <typename xIter, typename yIter>
-    requires InterpolationIteratorPair<xIter, yIter>
-Akima<xIter, yIter>::y_value_type
-Akima<xIter, yIter>::Derivative(x_value_type x) const {
-    const auto i = intervalIndex(x);
-    const auto h = _xS[i + 1] - _xS[i];
-    const auto offset = x - _xS[i];
-    const auto b = s[i];
-    const auto c = (static_cast<y_value_type>(3) * m[i] -
-                    static_cast<y_value_type>(2) * s[i] - s[i + 1]) /
-                   h;
-    const auto d =
-        (s[i] + s[i + 1] - static_cast<y_value_type>(2) * m[i]) / (h * h);
-    return b + offset * (static_cast<y_value_type>(2) * c +
-                         static_cast<y_value_type>(3) * d * offset);
-}
+    void ComputeSlopes() {
+        const auto n = Size();
+
+        _m.reserve(n - 1);
+        for (std::size_t i = 0; i + 1 < n; ++i) {
+            _m.push_back((_y[i + 1] - _y[i]) / (_x[i + 1] - _x[i]));
+        }
+
+        // The weights are magnitudes, so they stay real for complex ordinates.
+        using Weight = decltype(std::abs(Scalar{}));
+        constexpr auto oneHalf = static_cast<Weight>(0.5);
+
+        _s.reserve(n);
+        _s.push_back(_m[0]);
+        _s.push_back((_m[0] + _m[1]) * oneHalf);
+        for (std::size_t i = 2; i + 2 < n; ++i) {
+            const auto a = std::abs(_m[i + 1] - _m[i]);
+            const auto b = std::abs(_m[i - 1] - _m[i - 2]);
+            const auto weightSum = a + b;
+            if (weightSum == Weight{}) {
+                _s.push_back((_m[i - 1] + _m[i]) * oneHalf);
+            } else {
+                _s.push_back((a * _m[i - 1] + b * _m[i]) / weightSum);
+            }
+        }
+        if (n > 3) {
+            _s.push_back((_m[n - 3] + _m[n - 2]) * oneHalf);
+        }
+        _s.push_back(_m[n - 2]);
+    }
+};
+
+/// Borrow lvalue containers and own rvalue ones.
+template <std::ranges::viewable_range X, std::ranges::viewable_range Y>
+AkimaSpline(X &&,
+            Y &&) -> AkimaSpline<std::views::all_t<X>, std::views::all_t<Y>>;
 
 } // namespace Interpolation
 

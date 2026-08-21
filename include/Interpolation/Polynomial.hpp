@@ -2,6 +2,7 @@
 #define INTERPOLATION_POLYNOMIAL_HPP
 
 #include <algorithm>
+#include <cstddef>
 #include <initializer_list>
 #include <iostream>
 #include <iterator>
@@ -146,6 +147,39 @@ class Polynomial1D {
                                [x, m = Degree()](auto p, auto a) mutable {
                                    return p * x + static_cast<T>(m--) * a;
                                });
+    }
+
+    /**
+     * @brief Evaluate the polynomial or its `N`th derivative.
+     *
+     * This is the spelling every interpolator in the library shares, so a
+     * polynomial can stand in wherever one of them can.
+     *
+     * @tparam N Derivative order; `0` is the value itself.
+     * @param x Query abscissa.
+     */
+    template <std::size_t N = 0> T Evaluate(T x) const {
+        if constexpr (N == 0) {
+            return (*this)(x);
+        } else {
+            // Differentiate N times by repeated coefficient shifting, which
+            // costs N passes over the coefficients and no allocation beyond
+            // the working vector.
+            const auto degree = Degree();
+            if (degree < static_cast<int>(N)) {
+                return static_cast<T>(0);
+            }
+            std::vector<T> c{_a};
+            for (std::size_t pass = 0; pass < N; ++pass) {
+                for (std::size_t k = 1; k < c.size(); ++k) {
+                    c[k - 1] = static_cast<T>(k) * c[k];
+                }
+                c.pop_back();
+            }
+            return std::accumulate(
+                c.rbegin(), c.rend(), static_cast<T>(0),
+                [x](auto acc, auto a) { return acc * x + a; });
+        }
     }
 
     /**

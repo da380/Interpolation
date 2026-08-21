@@ -9,7 +9,7 @@
 TEST(LinearDeterministic, NonuniformValuesDerivativesAndExtrapolation) {
     const std::vector<double> x{0.0, 1.0, 3.0, 6.0};
     const std::vector<double> y{1.0, 3.0, -1.0, 5.0};
-    const Interpolation::Linear linear{x.begin(), x.end(), y.begin()};
+    const Interpolation::Linear linear{x, y};
 
     struct Sample {
         double x;
@@ -24,8 +24,8 @@ TEST(LinearDeterministic, NonuniformValuesDerivativesAndExtrapolation) {
     for (const auto &sample : samples) {
         SCOPED_TRACE(sample.x);
         InterpolationTest::ExpectScaledNear(linear(sample.x), sample.value);
-        InterpolationTest::ExpectScaledNear(linear.Derivative(sample.x),
-                                            sample.derivative);
+        InterpolationTest::ExpectScaledNear(
+            linear.template Evaluate<1>(sample.x), sample.derivative);
     }
 }
 
@@ -39,11 +39,12 @@ TEST(LinearDeterministic, ComplexLinearFunctionIsRecovered) {
         y.push_back(intercept + slope * value);
     }
 
-    const Interpolation::Linear linear{x.begin(), x.end(), y.begin()};
+    const Interpolation::Linear linear{x, y};
     for (const double query : {-2.0, -1.0, 0.0, 1.25, 5.0, 6.0}) {
         SCOPED_TRACE(query);
         InterpolationTest::ExpectScaledNear(linear(query),
                                             intercept + slope * query);
-        InterpolationTest::ExpectScaledNear(linear.Derivative(query), slope);
+        InterpolationTest::ExpectScaledNear(linear.template Evaluate<1>(query),
+                                            slope);
     }
 }

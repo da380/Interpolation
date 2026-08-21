@@ -38,11 +38,11 @@ LinearCheck() {
 
     // Set the y-values
     std::vector<y_value_t> y;
-    std::transform(x.begin(), x.end(), std::back_inserter(y),
-                   [&](auto x) { return p(x); });
+    std::ranges::transform(x, std::back_inserter(y),
+                           [&](auto x) { return p(x); });
 
     // Form the interpolating function.
-    auto f = Linear(x.begin(), x.end(), y.begin());
+    auto f = Linear(x, y);
 
     // Compare exact and interpolated values at randomly sampled points
     std::uniform_real_distribution<x_value_t> xDist{x1, x2};
@@ -53,7 +53,7 @@ LinearCheck() {
         auto xx = xDist(gen);
         x_value_t functionError = std::abs(f(xx) - p(xx));
         x_value_t derivativeError =
-            std::abs(f.Derivative(xx) - p.Derivative(xx));
+            std::abs(f.template Evaluate<1>(xx) - p.template Evaluate<1>(xx));
         if (functionError > eps)
             return 1;
         if (derivativeError > eps)

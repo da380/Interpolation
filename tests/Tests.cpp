@@ -31,33 +31,32 @@ CheckAgainstDenseReference(const std::vector<double> &x,
                            value_t ypr) {
     using CubicSplineTest::DenseReferenceSpline;
     using CubicSplineTest::RecoverIntervalSecondDerivatives;
+    using Interpolation::BoundaryCondition;
     using Interpolation::CubicSpline;
-    using Interpolation::CubicSplineBC;
 
     constexpr std::array boundaryConditions{
-        std::pair{CubicSplineBC::Free, CubicSplineBC::Free},
-        std::pair{CubicSplineBC::Free, CubicSplineBC::Clamped},
-        std::pair{CubicSplineBC::Clamped, CubicSplineBC::Free},
-        std::pair{CubicSplineBC::Clamped, CubicSplineBC::Clamped}};
+        std::pair{BoundaryCondition::Natural, BoundaryCondition::Natural},
+        std::pair{BoundaryCondition::Natural, BoundaryCondition::Clamped},
+        std::pair{BoundaryCondition::Clamped, BoundaryCondition::Natural},
+        std::pair{BoundaryCondition::Clamped, BoundaryCondition::Clamped}};
 
     for (const auto &[left, right] : boundaryConditions) {
         SCOPED_TRACE(static_cast<int>(left));
         SCOPED_TRACE(static_cast<int>(right));
-        auto spline =
-            CubicSpline(x.begin(), x.end(), y.begin(), left, ypl, right, ypr);
+        auto spline = CubicSpline(x, y, left, ypl, right, ypr);
         const DenseReferenceSpline reference{x, y, left, ypl, right, ypr};
 
         for (std::size_t i = 0; i + 1 < x.size(); ++i) {
             for (double fraction : {0.0, 0.25, 0.5, 0.75}) {
                 const auto value = x[i] + fraction * (x[i + 1] - x[i]);
                 ExpectScaledNear(spline(value), reference(value));
-                ExpectScaledNear(spline.Derivative(value),
-                                 reference.Derivative(value));
+                ExpectScaledNear(spline.template Evaluate<1>(value),
+                                 reference.template Evaluate<1>(value));
             }
         }
         ExpectScaledNear(spline(x.back()), reference(x.back()));
-        ExpectScaledNear(spline.Derivative(x.back()),
-                         reference.Derivative(x.back()));
+        ExpectScaledNear(spline.template Evaluate<1>(x.back()),
+                         reference.template Evaluate<1>(x.back()));
 
         const auto first =
             RecoverIntervalSecondDerivatives(spline, x[0], x[1], y[0], y[1]);
@@ -65,15 +64,15 @@ CheckAgainstDenseReference(const std::vector<double> &x,
         const auto last = RecoverIntervalSecondDerivatives(
             spline, x[lastIndex - 1], x[lastIndex], y[lastIndex - 1],
             y[lastIndex]);
-        if (left == CubicSplineBC::Free) {
+        if (left == BoundaryCondition::Natural) {
             ExpectScaledNear(first.first, value_t{});
         } else {
-            ExpectScaledNear(spline.Derivative(x.front()), ypl);
+            ExpectScaledNear(spline.template Evaluate<1>(x.front()), ypl);
         }
-        if (right == CubicSplineBC::Free) {
+        if (right == BoundaryCondition::Natural) {
             ExpectScaledNear(last.second, value_t{});
         } else {
-            ExpectScaledNear(spline.Derivative(x.back()), ypr);
+            ExpectScaledNear(spline.template Evaluate<1>(x.back()), ypr);
         }
     }
 }
@@ -147,7 +146,7 @@ TEST(CubicSpline, CheckComplexLongDouble) {
 TEST(CubicSpline, NaturalNonuniformKnownAnswer) {
     const std::vector<double> x{0.0, 1.0, 3.0, 4.0};
     const std::vector<double> y{0.0, 1.0, 0.0, 2.0};
-    const Interpolation::CubicSpline spline{x.begin(), x.end(), y.begin()};
+    const Interpolation::CubicSpline spline{x, y};
 
     struct Sample {
         double x;
@@ -160,7 +159,8 @@ TEST(CubicSpline, NaturalNonuniformKnownAnswer) {
 
     for (const auto &sample : samples) {
         ExpectScaledNear(spline(sample.x), sample.value);
-        ExpectScaledNear(spline.Derivative(sample.x), sample.derivative);
+        ExpectScaledNear(spline.template Evaluate<1>(sample.x),
+                         sample.derivative);
     }
 
     const auto first = CubicSplineTest::RecoverIntervalSecondDerivatives(

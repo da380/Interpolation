@@ -29,7 +29,7 @@ main() {
         y[i] = func(x[i]);
     }
 
-    CubicSpline f(x.begin(), x.end(), y.begin());
+    CubicSpline f(x, y);
 
     int m = 50;
     std::ofstream file("Linear.out");
@@ -59,15 +59,16 @@ main() {
     auto dx = (x2 - x1) / static_cast<x_value_t>(n - 1);
     std::generate_n(std::back_inserter(x), n,
                     [x1, dx, m = 0]() mutable { return x1 + dx * m++; });
-    std::transform(x.begin(), x.end(), std::back_inserter(y),
+    std::ranges::transform(x, std::back_inserter(y),
                    [&](auto x) { return p(x); });
-    std::transform(x.begin(), x.end(), std::back_inserter(yp),
-                   [&](auto x) { return p.Derivative(x); });
+    std::ranges::transform(x, std::back_inserter(yp),
+                   [&](auto x) { return p.template Evaluate<1>(x); });
 
     // Form the cubic spline.
     auto f =
-        CubicSpline(x.begin(), x.end(), y.begin(), CubicSplineBC::Clamped,
-                    p.Derivative(x1), CubicSplineBC::Clamped, p.Derivative(x2));
+        CubicSpline(x, y, BoundaryCondition::Clamped,
+                    p.template Evaluate<1>(x1), BoundaryCondition::Clamped,
+    p.template Evaluate<1>(x2));
 
     // Compare exact and interpolated values at randomly sampled points
     std::random_device rd{};
@@ -81,9 +82,8 @@ main() {
         auto err = std::abs(f(xx) - p(xx));
         if (err > maxErr)
             maxErr = err;
-        auto derivErr = std::abs(f.Derivative(xx) - p.Derivative(xx));
-        if (derivErr > maxDerivErr)
-            maxDerivErr = derivErr;
+        auto derivErr = std::abs(f.template Evaluate<1>(xx) - p.template
+    Evaluate<1>(xx)); if (derivErr > maxDerivErr) maxDerivErr = derivErr;
     }
     std::cout << "Maximum interpolation error for function values = " << maxErr
               << std::endl;

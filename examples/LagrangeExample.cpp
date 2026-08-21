@@ -22,7 +22,7 @@ main() {
     }
 
     // Set the Lagrange polynomial
-    auto p = LagrangePolynomial(X.begin(), X.end());
+    auto p = LagrangeBasis(X);
 
     // Set the values for plotting
     int n = 100;
@@ -32,6 +32,7 @@ main() {
     for (int i = 0; i < n; i++) {
         double x = x1 + i * dx;
         int j = 1;
-        file << x << " " << p(j, x) << " " << p.Derivative(j, x) << std::endl;
+        file << x << " " << p(j, x) << " " << p.template Evaluate<1>(j, x)
+             << std::endl;
     }
 }

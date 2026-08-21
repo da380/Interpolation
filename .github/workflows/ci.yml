@@ -60,13 +60,12 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-      # The suite is 34 tests in Release and 35 in Debug: Akima's death test
-      # checks an assert, which compiles out under NDEBUG. Phase 2 turns these
-      # preconditions into thrown exceptions, at which point the counts match.
+      # One number for both build types. Preconditions now throw rather than
+      # assert, so no test compiles out under NDEBUG and the Release and Debug
+      # counts agree.
       - name: Check the oracle is intact
         run: |
-          expected=34
-          if [ "${{ matrix.build_type }}" = "Debug" ]; then expected=35; fi
+          expected=43
           count=$(ctest --test-dir build -N | sed -n 's/^Total Tests: //p')
           echo "Discovered $count tests, expected at least $expected."
           if [ "$count" -lt "$expected" ]; then

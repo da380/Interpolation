@@ -1,121 +1,97 @@
 #ifndef INTERPOLATION_LINEAR_HPP
 #define INTERPOLATION_LINEAR_HPP
 
-#include <algorithm>
-#include <cassert>
-#include <concepts>
-#include <iterator>
-#include <vector>
+#include <cstddef>
+#include <ranges>
+#include <utility>
 
 #include <Interpolation/Concepts.hpp>
+#include <Interpolation/Samples.hpp>
 
 namespace Interpolation {
 
 /**
  * @brief Piecewise-linear interpolation over ordered sample points.
  *
- * The object stores iterators rather than copying the samples. The referenced
- * containers must therefore remain alive and must not be reallocated while the
- * interpolator is in use. Queries outside the sample interval are extrapolated
- * using the first or final line segment.
+ * Construction takes ranges. An lvalue container is borrowed and an rvalue is
+ * taken by value, which follows from storing `std::views::all_t`: an lvalue
+ * deduces to a `ref_view` and an rvalue to an `owning_view`. There is no
+ * policy tag and no second constructor.
  *
- * @tparam xIter Random-access iterator over real abscissae.
- * @tparam yIter Random-access iterator over real or complex ordinates.
+ * @code
+ * Linear borrowing{x, y};                        // borrows both containers
+ * Linear owning{std::move(x), std::move(y)};     // owns both
+ * @endcode
  *
- * @pre The abscissa range contains at least two strictly increasing values.
+ * Queries outside the sample interval continue the first or final segment.
+ *
+ * @tparam XView View over real abscissae.
+ * @tparam YView View over real or complex ordinates.
  */
-template <typename xIter, typename yIter>
-    requires InterpolationIteratorPair<xIter, yIter>
+template <typename XView, typename YView>
+    requires InterpolationRanges<XView, YView> && std::ranges::view<XView> &&
+             std::ranges::view<YView>
 class Linear {
   public:
-    /** @brief Scalar type used for abscissae. */
-    using x_value_type = std::iter_value_t<xIter>;
-    /** @brief Scalar type used for interpolated values. */
-    using y_value_type = std::iter_value_t<yIter>;
+    /** @brief Abscissa precision. */
+    using Real = std::ranges::range_value_t<XView>;
+    /** @brief Ordinate type, real or complex. */
+    using Scalar = std::ranges::range_value_t<YView>;
 
     /**
-     * @brief Construct an interpolator over a non-owning sample range.
-     * @param xStart Iterator to the first abscissa.
-     * @param xFinish Iterator one past the final abscissa.
-     * @param yStart Iterator to the ordinate corresponding to `xStart`.
+     * @brief Construct from abscissa and ordinate ranges.
+     * @param x Strictly increasing abscissae, at least two.
+     * @param y Ordinates, the same length as `x`.
+     * @throws std::invalid_argument if the ranges differ in length, are too
+     *         short, or the abscissae are not strictly increasing.
      */
-    Linear(xIter xStart, xIter xFinish, yIter yStart);
+    constexpr Linear(XView x, YView y) : _x{std::move(x)}, _y{std::move(y)} {
+        Detail::ValidateSamples(_x, _y, 2, "Linear");
+    }
+
+    /** @brief Number of interpolation nodes. */
+    constexpr std::size_t Size() const {
+        return static_cast<std::size_t>(std::ranges::size(_x));
+    }
 
     /**
-     * @brief Evaluate the piecewise-linear interpolant or extrapolant.
-     * @param x Query abscissa.
-     * @return Interpolated ordinate.
-     * @par Complexity
-     * Logarithmic search in the number of samples.
-     */
-    y_value_type operator()(x_value_type x) const;
-
-    /**
-     * @brief Evaluate the slope of the selected line segment.
+     * @brief Evaluate the interpolant or its `N`th derivative.
      *
-     * At an interior knot the segment to the right is selected; at the final
-     * knot the final segment is selected.
+     * The interpolant is piecewise linear, so derivatives of order two and
+     * above are identically zero. At an interior knot the segment to the
+     * right is used.
      *
+     * @tparam N Derivative order; `0` is the value itself.
      * @param x Query abscissa.
-     * @return Piecewise-constant first derivative.
-     * @par Complexity
-     * Logarithmic search in the number of samples.
      */
-    y_value_type Derivative(x_value_type x) const;
+    template <std::size_t N = 0> constexpr Scalar Evaluate(Real x) const {
+        if constexpr (N > 1) {
+            return Scalar{};
+        } else {
+            const auto i = Detail::LocateSegment(_x, x);
+            const auto h = _x[i + 1] - _x[i];
+            if constexpr (N == 1) {
+                return (_y[i + 1] - _y[i]) / h;
+            } else {
+                const auto a = (_x[i + 1] - x) / h;
+                const auto b = (x - _x[i]) / h;
+                return a * _y[i] + b * _y[i + 1];
+            }
+        }
+    }
+
+    /** @brief Evaluate the interpolant; the same as `Evaluate<0>`. */
+    constexpr Scalar operator()(Real x) const { return Evaluate<0>(x); }
 
   private:
-    xIter _xS; // Iterator to start of x values.
-    xIter _xF; // Iterator to end of x values.
-    yIter _yS; // Iterator to start of y values.
+    XView _x;
+    YView _y;
 };
 
-template <typename xIter, typename yIter>
-    requires InterpolationIteratorPair<xIter, yIter>
-Linear<xIter, yIter>::Linear(xIter xS, xIter xF, yIter yS)
-    : _xS{xS}, _xF{xF}, _yS{yS} {}
-
-template <typename xIter, typename yIter>
-    requires InterpolationIteratorPair<xIter, yIter>
-Linear<xIter, yIter>::y_value_type
-Linear<xIter, yIter>::operator()(const x_value_type x) const {
-    // Find first element larger than x.
-    auto iter = std::upper_bound(_xS, _xF, x);
-    // Adjust the iterator if out of range.
-    if (iter == _xS)
-        ++iter;
-    if (iter == _xF)
-        --iter;
-    // Perform the interpolation.
-    auto i2 = std::distance(_xS, iter);
-    auto i1 = i2 - 1;
-    auto x1 = _xS[i1];
-    auto x2 = _xS[i2];
-    auto h = x2 - x1;
-    auto a = (x2 - x) / h;
-    auto b = (x - x1) / h;
-    return a * _yS[i1] + b * _yS[i2];
-}
-
-template <typename xIter, typename yIter>
-    requires InterpolationIteratorPair<xIter, yIter>
-Linear<xIter, yIter>::y_value_type
-Linear<xIter, yIter>::Derivative(const x_value_type x) const {
-    // Find first element larger than x.
-    auto iter = std::upper_bound(_xS, _xF, x);
-    // Adjust the iterator if out of range.
-    if (iter == _xS)
-        ++iter;
-    if (iter == _xF)
-        --iter;
-    // Perform the interpolation.
-    auto i2 = std::distance(_xS, iter);
-    auto i1 = i2 - 1;
-    auto x1 = _xS[i1];
-    auto x2 = _xS[i2];
-    auto h = x2 - x1;
-    return (_yS[i2] - _yS[i1]) / h;
-}
+/// Borrow lvalue containers and own rvalue ones.
+template <std::ranges::viewable_range X, std::ranges::viewable_range Y>
+Linear(X &&, Y &&) -> Linear<std::views::all_t<X>, std::views::all_t<Y>>;
 
 } // namespace Interpolation
 
-#endif //  INTERPOLATION_LINEAR_HPP
+#endif // INTERPOLATION_LINEAR_HPP

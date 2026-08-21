@@ -22,7 +22,7 @@ main() {
         y[i] = func(x[i]);
     }
 
-    Linear f(x.begin(), x.end(), y.begin());
+    Linear f(x, y);
 
     int m = 50;
     std::ofstream file("Linear.out");

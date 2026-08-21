@@ -1,11 +1,11 @@
 #include <gtest/gtest.h>
 
-#include <Interpolation/AkimaSpline>
-#include <Interpolation/All>
-#include <Interpolation/CubicSpline>
-#include <Interpolation/Lagrange>
-#include <Interpolation/Linear>
-#include <Interpolation/Polynomial>
+#include <Interpolation/AkimaSpline.hpp>
+#include <Interpolation/Interpolation.hpp>
+#include <Interpolation/CubicSpline.hpp>
+#include <Interpolation/Lagrange.hpp>
+#include <Interpolation/Linear.hpp>
+#include <Interpolation/Polynomial.hpp>
 #include <complex>
 #include <list>
 #include <vector>

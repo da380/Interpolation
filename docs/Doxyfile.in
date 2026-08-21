@@ -1,12 +1,11 @@
-PROJECT_NAME           = "Interp"
+PROJECT_NAME           = "Interpolation"
 OUTPUT_DIRECTORY       = "@CMAKE_CURRENT_BINARY_DIR@/docs"
 CREATE_SUBDIRS         = NO
 
-INPUT                  = "@CMAKE_CURRENT_SOURCE_DIR@/Interpolation/src" \
+INPUT                  = "@CMAKE_CURRENT_SOURCE_DIR@/include" \
                          "@CMAKE_CURRENT_SOURCE_DIR@/README.md" \
-                         "@CMAKE_CURRENT_SOURCE_DIR@/implementation_status.md" \
                          "@CMAKE_CURRENT_SOURCE_DIR@/docs"
-FILE_PATTERNS          = *.h *.md
+FILE_PATTERNS          = *.hpp *.md
 RECURSIVE              = YES
 EXCLUDE_PATTERNS       = */build/* */_deps/*
 EXAMPLE_PATH           = "@CMAKE_CURRENT_SOURCE_DIR@/examples"

@@ -1,7 +1,7 @@
 #ifndef INTERPOLATION_TEST_LINEAR_GUARD_H
 #define INTERPOLATION_TEST_LINEAR_GUARD_H
 
-#include <Interpolation/All>
+#include <Interpolation/Interpolation.hpp>
 #include <complex>
 #include <limits>
 #include <numbers>

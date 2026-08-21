@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include <Interpolation/AkimaSpline>
+#include <Interpolation/AkimaSpline.hpp>
 #include <algorithm>
 #include <complex>
 #include <utility>

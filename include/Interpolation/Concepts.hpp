@@ -1,5 +1,5 @@
-#ifndef INTERPOLATION_CONCEPTS_GUARD_H
-#define INTERPOLATION_CONCEPTS_GUARD_H
+#ifndef INTERPOLATION_CONCEPTS_HPP
+#define INTERPOLATION_CONCEPTS_HPP
 
 #include <complex>
 #include <concepts>
@@ -83,4 +83,4 @@ concept InterpolationIteratorPair = requires(xIter x, yIter y) {
 
 }   // namespace Interpolation
 
-#endif   //  INTERPOLATION_CONCEPTS_GUARD_H
+#endif   //  INTERPOLATION_CONCEPTS_HPP

@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include <Interpolation/Lagrange>
+#include <Interpolation/Lagrange.hpp>
 #include <complex>
 #include <vector>
 

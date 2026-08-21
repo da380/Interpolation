@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include <Interpolation/Polynomial>
+#include <Interpolation/Polynomial.hpp>
 #include <complex>
 #include <sstream>
 #include <type_traits>

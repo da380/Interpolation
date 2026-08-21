@@ -1,5 +1,5 @@
-#ifndef INTERPOLATION_LAGRANGE_GUARD_H
-#define INTERPOLATION_LAGRANGE_GUARD_H
+#ifndef INTERPOLATION_LAGRANGE_HPP
+#define INTERPOLATION_LAGRANGE_HPP
 
 #include <Eigen/Core>
 #include <algorithm>
@@ -10,7 +10,7 @@
 #include <ranges>
 #include <vector>
 
-#include "Concepts.h"
+#include <Interpolation/Concepts.hpp>
 
 namespace Interpolation {
 

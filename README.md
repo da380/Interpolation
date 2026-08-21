@@ -1,6 +1,6 @@
-# Interp
+# Interpolation
 
-Interp is a C++20 header-only template library for one-dimensional
+Interpolation is a C++20 header-only template library for one-dimensional
 interpolation and polynomial operations. Abscissae are real floating-point
 values; ordinates and polynomial coefficients may be real or complex where
 noted below. Eigen provides the linear algebra used by cubic splines.
@@ -29,19 +29,19 @@ use. Abscissae must be strictly increasing.
 
 ## Use from CMake
 
-Interp exports the interface target `Interpolation`. It can be brought into a
-project with `FetchContent`:
+Interpolation exports the interface target `Interpolation::Interpolation`.
+It can be brought into a project with `FetchContent`:
 
 ```cmake
 include(FetchContent)
 FetchContent_Declare(
-  Interp
-  GIT_REPOSITORY https://github.com/adcm2/Interp.git
+  Interpolation
+  GIT_REPOSITORY https://github.com/da380/Interpolation.git
   GIT_TAG <reviewed-commit-or-tag>
 )
-FetchContent_MakeAvailable(Interp)
+FetchContent_MakeAvailable(Interpolation)
 
-target_link_libraries(my_target PRIVATE Interpolation)
+target_link_libraries(my_target PRIVATE Interpolation::Interpolation)
 ```
 
 Pin a reviewed commit or release tag rather than a moving branch in consuming
@@ -50,7 +50,7 @@ projects.
 ## Minimal example
 
 ```cpp
-#include <Interpolation/CubicSpline>
+#include <Interpolation/CubicSpline.hpp>
 #include <vector>
 
 std::vector<double> x{0.0, 1.0, 3.0, 4.0};
@@ -67,9 +67,10 @@ Interpolation::CubicSpline clamped{
     -0.5, 1.25};
 ```
 
-Use `<Interpolation/Linear>`, `<Interpolation/AkimaSpline>`,
-`<Interpolation/Lagrange>`, or `<Interpolation/Polynomial>` to include a single
-facility, and `<Interpolation/All>` to include the complete public API.
+Use `<Interpolation/Linear.hpp>`, `<Interpolation/AkimaSpline.hpp>`,
+`<Interpolation/Lagrange.hpp>`, or `<Interpolation/Polynomial.hpp>` to include a
+single facility, and `<Interpolation/Interpolation.hpp>` for the complete
+public API.
 
 ## Build, test, and document
 

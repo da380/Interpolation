@@ -1,5 +1,5 @@
 
-#include <Interpolation/All>
+#include <Interpolation/Interpolation.hpp>
 #include <algorithm>
 #include <chrono>
 #include <cmath>

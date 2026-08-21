@@ -1,5 +1,5 @@
-#ifndef INTERPOLATION_LINEAR_GUARD_H
-#define INTERPOLATION_LINEAR_GUARD_H
+#ifndef INTERPOLATION_LINEAR_HPP
+#define INTERPOLATION_LINEAR_HPP
 
 #include <algorithm>
 #include <cassert>
@@ -7,7 +7,7 @@
 #include <iterator>
 #include <vector>
 
-#include "Concepts.h"
+#include <Interpolation/Concepts.hpp>
 
 namespace Interpolation {
 
@@ -120,4 +120,4 @@ Linear<xIter, yIter>::Derivative(const x_value_type x) const {
 
 }   // namespace Interpolation
 
-#endif   //  INTERPOLATION_LINEAR_GUARD_H
+#endif   //  INTERPOLATION_LINEAR_HPP

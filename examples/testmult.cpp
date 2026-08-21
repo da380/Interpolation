@@ -1,5 +1,5 @@
 // #include <PlanetaryModel/All>
-#include <Interpolation/All>
+#include <Interpolation/Interpolation.hpp>
 #include <algorithm>
 #include <cmath>
 #include <fstream>

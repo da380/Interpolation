@@ -1,7 +1,0 @@
-#ifndef INTERPOLATION_AKIMA_SPLINE_MODULE_H
-#define INTERPOLATION_AKIMA_SPLINE_MODULE_H
-
-#include "src/AkimaSpline.h"
-#include "src/Concepts.h"
-
-#endif

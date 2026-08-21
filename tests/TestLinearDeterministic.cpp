@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include <Interpolation/Linear>
+#include <Interpolation/Linear.hpp>
 #include <complex>
 #include <vector>
 

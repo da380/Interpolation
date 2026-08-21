@@ -1,5 +1,5 @@
-#ifndef INTERPOLATION_CUBIC_SPLINE_GUARD_H
-#define INTERPOLATION_CUBIC_SPLINE_GUARD_H
+#ifndef INTERPOLATION_CUBIC_SPLINE_HPP
+#define INTERPOLATION_CUBIC_SPLINE_HPP
 
 #include <Eigen/Core>
 #include <Eigen/SparseCholesky>
@@ -10,7 +10,7 @@
 #include <iterator>
 #include <vector>
 
-#include "Concepts.h"
+#include <Interpolation/Concepts.hpp>
 
 namespace Interpolation {
 
@@ -260,4 +260,4 @@ CubicSpline<xIter, yIter>::Derivative(x_value_type x) const {
 
 }   // namespace Interpolation
 
-#endif   //  INTERPOLATION_CUBIC_SPLINE_GUARD_H
+#endif   //  INTERPOLATION_CUBIC_SPLINE_HPP

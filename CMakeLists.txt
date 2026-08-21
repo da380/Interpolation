@@ -29,7 +29,7 @@ FetchContent_MakeAvailable(Eigen3)
 add_library (Interpolation INTERFACE)
 target_link_libraries(Interpolation INTERFACE Eigen3::Eigen)
 target_include_directories (Interpolation INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${INCLUDE_INSTALL_DIR}>
 )
 

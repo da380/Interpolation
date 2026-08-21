@@ -2,7 +2,7 @@
 #define INTERPOLATION_TEST_CUBIC_SPLINE_GUARD_H
 
 #include <Eigen/Dense>
-#include <Interpolation/All>
+#include <Interpolation/Interpolation.hpp>
 #include <algorithm>
 #include <complex>
 #include <iostream>

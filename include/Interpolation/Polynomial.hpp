@@ -1,5 +1,5 @@
-#ifndef INTERPOLATION_POLYNOMIAL_GUARD_H
-#define INTERPOLATION_POLYNOMIAL_GUARD_H
+#ifndef INTERPOLATION_POLYNOMIAL_HPP
+#define INTERPOLATION_POLYNOMIAL_HPP
 
 #include <algorithm>
 #include <initializer_list>
@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "Concepts.h"
+#include <Interpolation/Concepts.hpp>
 
 namespace Interpolation {
 
@@ -473,4 +473,4 @@ operator*(const Interpolation::Polynomial1D<T> &a,
     return myval;
 };
 
-#endif   // INTERPOLATION_POLYNOMIAL_GUARD_H
+#endif   // INTERPOLATION_POLYNOMIAL_HPP

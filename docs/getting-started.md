@@ -6,12 +6,12 @@ Each public forwarding header exposes one facility:
 
 | Header | Public API |
 | --- | --- |
-| `<Interpolation/Linear>` | `Linear` |
-| `<Interpolation/CubicSpline>` | `CubicSpline`, `CubicSplineBC` |
-| `<Interpolation/AkimaSpline>` | `Akima` |
-| `<Interpolation/Lagrange>` | `Lagrange`, `LagrangePolynomial` |
-| `<Interpolation/Polynomial>` | `Polynomial1D` |
-| `<Interpolation/All>` | All of the above and the public concepts |
+| `<Interpolation/Linear.hpp>` | `Linear` |
+| `<Interpolation/CubicSpline.hpp>` | `CubicSpline`, `CubicSplineBC` |
+| `<Interpolation/AkimaSpline.hpp>` | `Akima` |
+| `<Interpolation/Lagrange.hpp>` | `Lagrange`, `LagrangePolynomial` |
+| `<Interpolation/Polynomial.hpp>` | `Polynomial1D` |
+| `<Interpolation/Interpolation.hpp>` | All of the above and the public concepts |
 
 Interp is header-only. Link the CMake interface target `Interpolation` so the
 include directory, C++ standard, Eigen dependency, and transitive requirements

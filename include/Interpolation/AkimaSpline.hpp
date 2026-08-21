@@ -1,5 +1,5 @@
-#ifndef INTERPOLATION_AKIMA_SPLINE_GUARD_H
-#define INTERPOLATION_AKIMA_SPLINE_GUARD_H
+#ifndef INTERPOLATION_AKIMA_SPLINE_HPP
+#define INTERPOLATION_AKIMA_SPLINE_HPP
 
 #include <Eigen/Core>
 #include <Eigen/IterativeLinearSolvers>
@@ -11,7 +11,7 @@
 #include <iterator>
 #include <vector>
 
-#include "Concepts.h"
+#include <Interpolation/Concepts.hpp>
 
 namespace Interpolation {
 
@@ -169,4 +169,4 @@ Akima<xIter, yIter>::Derivative(x_value_type x) const {
 
 }   // namespace Interpolation
 
-#endif   // INTERPOLATION_AKIMA_SPLINE_GUARD_H
+#endif   // INTERPOLATION_AKIMA_SPLINE_HPP

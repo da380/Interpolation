@@ -29,7 +29,10 @@ rather than only evaluated at a point.
 
 All interpolators take ranges. An lvalue container is borrowed, so it must
 outlive the interpolator and must not be reallocated; an rvalue is moved in
-and owned, so the interpolator can outlive its source. Abscissae must be
+and owned, so the interpolator can outlive its source. Note that the splines
+work out their coefficients once, at construction: changing a borrowed
+container afterwards leaves the new samples paired with the old coefficients,
+so rebuild rather than mutate. Abscissae must be
 strictly increasing, and this is enforced at construction.
 
 ## Requirements
@@ -187,9 +190,15 @@ and enforcing it would only start an argument about tolerance. And evaluation
 is **right-continuous** by default, with `Limits` giving both sides, which at a
 real interface is usually what is wanted.
 
-All pieces share a type. Mixing kinds is type erasure, a separate concern: a
-type-erased `Function1D` would itself be a `Function1D`, so `Piecewise` of it
-would give mixed pieces without this class knowing anything about it.
+All pieces share a type. Mixing kinds is type erasure, a separate concern, and
+`AnyFunction1D` provides it: it holds any function with matching `Real` and
+`Scalar` behind one type, so `Piecewise<AnyFunction1D<double, double>>` lets
+one layer be a spline and the next a polynomial, with `Piecewise` unchanged
+and knowing nothing about erasure. It is the only place in the library that
+erases a type: construction allocates once and evaluation is a virtual call,
+so reach for it when you need mixed kinds, not by default. It shares rather
+than clones on copy, which keeps it copyable even when what it holds is
+move-only.
 
 ## Two dimensions
 
@@ -214,11 +223,38 @@ the second derivatives in each variable and the mixed fourth derivative are all
 computed once at construction, so evaluation is two applications of the same
 segment formula the one-dimensional spline uses, and allocates nothing.
 
-The natural condition is applied on all four edges. That leaves an `O(h^2)`
-error in a band near the boundary, so the global worst-case error converges at
-second order even though the interior is fourth order. If edge accuracy
-matters for your data, sample a margin wider than the region you intend to
-use.
+The edge condition defaults to `BoundaryCondition::NotAKnot`, which keeps the
+scheme fourth order at the boundary; it needs at least four nodes on each
+axis. `BoundaryCondition::Natural` is also available and works with three,
+but it forces a curvature the data usually does not have, which costs an
+order near the edges and leaves the global error converging at second order.
+On `sin(x)cos(y)` over a 65 by 65 grid the difference is about 770x in worst
+global error.
+
+## Examples
+
+`examples/` holds a numbered series, meant to be read in order, each assuming
+what came before. They print to stdout rather than writing data files, so
+running one tells you immediately whether it did the right thing.
+
+| | |
+| --- | --- |
+| `01-linear-interpolation` | Ranges in, `Evaluate<N>`, extrapolation, validation |
+| `02-cubic-splines` | Smoothness, and derivatives from the same object |
+| `03-boundary-conditions` | Natural, clamped and not-a-knot against exact cubic data |
+| `04-akima-and-lagrange` | Overshoot near a step; the global polynomial and its basis |
+| `05-polynomials` | Arithmetic, calculus, type promotion, seeded randomness |
+| `06-borrowing-and-owning` | What the value category of the argument decides |
+| `07-function-algebra` | `Function1D`, composing, differentiating expressions |
+| `08-derivatives-and-integrals` | `Primitive`, and integrals that are exact |
+| `09-piecewise-layers` | Discontinuities, extracting a layer, mixed kinds |
+| `10-two-dimensions` | Grids, mixed partials, why the edge condition matters |
+
+```sh
+cmake --preset gcc-14
+cmake --build --preset gcc-14 --target examples
+./build/gcc-14/examples/03-boundary-conditions
+```
 
 ## Build, test, and document
 
@@ -250,6 +286,12 @@ Git.
 
 `BoundaryCondition::Natural` sets the endpoint second derivative to zero.
 `BoundaryCondition::Clamped` specifies the endpoint first derivative.
+`BoundaryCondition::NotAKnot` makes the third derivative continuous across the
+first and last interior knots, which imposes nothing false at the boundary: it
+reproduces a cubic exactly and keeps the scheme fourth order right to the ends,
+where Natural costs an order. It needs no extra information and at least four
+nodes, and it constrains the whole system, so it must be used at both ends or
+neither.
 
 The nodal second derivatives satisfy a tridiagonal system, which is solved
 directly by the Thomas algorithm. The system is strictly diagonally dominant,

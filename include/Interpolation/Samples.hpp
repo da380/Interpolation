@@ -204,6 +204,109 @@ NaturalCurvatures(std::span<const Real> nodes, std::span<const Scalar> values,
                                    std::span<const Real>{super}, curvature);
 }
 
+/**
+ * @brief Not-a-knot second derivatives at the nodes.
+ *
+ * The not-a-knot condition makes the third derivative continuous across the
+ * first and last interior knots, so the first two polynomial pieces are one
+ * cubic and the last two are another. Unlike the natural condition it does
+ * not impose anything false at the boundary, so the scheme stays fourth
+ * order there and a cubic is reproduced exactly.
+ *
+ * It is solved in the nodal-slope formulation rather than the nodal-curvature
+ * one. Written directly in curvatures the boundary row reaches outside the
+ * tridiagonal band, and eliminating that entry produces a leading coefficient
+ * of `h0^2 - h1^2`, which vanishes on a uniform grid. In slopes the same
+ * condition gives the boundary row
+ *
+ * @f[
+ * h_1 d_0 + (h_0 + h_1) d_1 =
+ *   \frac{h_1 (2h_1 + 3h_0)\delta_0 + h_0^2 \delta_1}{h_0 + h_1},
+ * @f]
+ *
+ * whose diagonal is @f$h_1 > 0@f$ for any spacing. The slopes are then
+ * converted to curvatures so that evaluation uses the same segment formula as
+ * every other spline here.
+ *
+ * No pivoting is used. The interior rows are diagonally dominant by a factor
+ * of two; the two boundary rows are not, but the first elimination step turns
+ * the second pivot into @f$h_0 + h_1@f$, and the pivots stay positive.
+ *
+ * @param nodes Strictly increasing abscissae, at least four of them.
+ * @param values Sampled values, the same length as `nodes`.
+ * @param curvature Output, the same length as `nodes`.
+ * @param sub Scratch, the same length as `nodes`.
+ * @param diag Scratch, the same length as `nodes`.
+ * @param super Scratch, the same length as `nodes`.
+ * @param slope Scratch, the same length as `nodes`.
+ */
+template <typename Real, typename Scalar>
+void
+NotAKnotCurvatures(std::span<const Real> nodes, std::span<const Scalar> values,
+                   std::span<Scalar> curvature, std::span<Real> sub,
+                   std::span<Real> diag, std::span<Real> super,
+                   std::span<Scalar> slope) {
+    const auto n = nodes.size();
+    assert(n >= 4);
+
+    const auto h = [&](std::size_t i) { return nodes[i + 1] - nodes[i]; };
+    const auto secant = [&](std::size_t i) {
+        return (values[i + 1] - values[i]) / h(i);
+    };
+
+    std::ranges::fill(sub, Real{});
+    std::ranges::fill(diag, Real{});
+    std::ranges::fill(super, Real{});
+    std::ranges::fill(slope, Scalar{});
+
+    // Interior rows: continuity of the second derivative, in slope form.
+    for (std::size_t i = 1; i + 1 < n; ++i) {
+        sub[i] = h(i);
+        diag[i] = 2 * (h(i - 1) + h(i));
+        super[i] = h(i - 1);
+        slope[i] = static_cast<Real>(3) *
+                   (h(i) * secant(i - 1) + h(i - 1) * secant(i));
+    }
+
+    // Left not-a-knot row.
+    {
+        const auto h0 = h(0);
+        const auto h1 = h(1);
+        diag[0] = h1;
+        super[0] = h0 + h1;
+        slope[0] = (h1 * (2 * h1 + 3 * h0) * secant(0) + h0 * h0 * secant(1)) /
+                   (h0 + h1);
+    }
+
+    // Right not-a-knot row, the mirror of the left.
+    {
+        const auto hLast = h(n - 2);
+        const auto hPrev = h(n - 3);
+        sub[n - 1] = hLast + hPrev;
+        diag[n - 1] = hPrev;
+        slope[n - 1] = (hPrev * (2 * hPrev + 3 * hLast) * secant(n - 2) +
+                        hLast * hLast * secant(n - 3)) /
+                       (hPrev + hLast);
+    }
+
+    SolveTridiagonal<Real, Scalar>(std::span<const Real>{sub}, diag,
+                                   std::span<const Real>{super}, slope);
+
+    // Convert nodal slopes to nodal curvatures: on segment i the piece is
+    // y_i + d_i t + c t^2 + e t^3, so S''(x_i) = 2c.
+    for (std::size_t i = 0; i + 1 < n; ++i) {
+        curvature[i] = static_cast<Real>(2) *
+                       (static_cast<Real>(3) * secant(i) -
+                        static_cast<Real>(2) * slope[i] - slope[i + 1]) /
+                       h(i);
+    }
+    const auto hEnd = h(n - 2);
+    curvature[n - 1] = (static_cast<Real>(2) * slope[n - 2] +
+                        static_cast<Real>(4) * slope[n - 1] -
+                        static_cast<Real>(6) * secant(n - 2)) /
+                       hEnd;
+}
+
 } // namespace Interpolation::Detail
 
 #endif // INTERPOLATION_SAMPLES_HPP

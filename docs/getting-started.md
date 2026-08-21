@@ -47,6 +47,11 @@ value category of the argument:
 - an **rvalue** is **owned**. The data is moved in, so the interpolator can be
   returned from a function or stored beyond the lifetime of its source.
 
+The splines compute their coefficients once, at construction. Changing a
+borrowed container afterwards leaves the new samples paired with the old
+coefficients, which is neither the old interpolant nor the new one; build a
+fresh object instead.
+
 ```cpp
 Interpolation::CubicSpline borrowing{x, y};                       // ref_view
 Interpolation::CubicSpline owning{std::move(x), std::move(y)};    // owning_view
@@ -63,13 +68,13 @@ samples use a doubled abscissa to mark the jump.
 | Routine | Input precondition | Query behavior |
 | --- | --- | --- |
 | `Linear` | At least 2 nodes | Extrapolates with the first or final line segment |
-| `CubicSpline` | At least 2 nodes | Extrapolates with the first or final cubic segment |
+| `CubicSpline` | At least 2 nodes, or 4 for not-a-knot | Extrapolates with the first or final cubic segment |
 | `AkimaSpline` | At least 3 nodes | Extrapolates with the first or final cubic segment |
 | `Lagrange` | At least 1 node | Evaluates the global polynomial for any real query |
 | `LagrangeBasis` | At least 1 node | Evaluates the selected basis polynomial for any real query |
 | `Polynomial` | Defaults to zero; explicit input needs at least 1 coefficient | Evaluates for any supported scalar argument |
 | `Bilinear` | At least 2 nodes on each axis | Continues the nearest edge cell |
-| `BicubicSpline` | At least 2 nodes on each axis | Continues the nearest edge cell |
+| `BicubicSpline` | At least 4 nodes on each axis, or 2 with the natural condition | Continues the nearest edge cell |
 | `Piecewise` | At least 1 piece; breakpoints strictly increasing | Nearest piece continues outside the domain |
 
 ## Scalar types

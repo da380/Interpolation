@@ -4,6 +4,7 @@
 #include <array>
 #include <concepts>
 #include <cstddef>
+#include <memory>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -251,6 +252,111 @@ class Identity {
     /** @brief Evaluate the node; the same as `Evaluate<0>`. */
     constexpr Scalar operator()(Real x) const { return Evaluate<0>(x); }
 };
+
+/**
+ * @brief A `Function1D` holding any function with matching `Real` and
+ * `Scalar`.
+ *
+ * The rest of the library is static: every node knows its operands' types, so
+ * everything inlines and nothing is allocated. That is the right default, but
+ * it means a container cannot hold a mixture of kinds. This is the escape
+ * hatch, and it is deliberately the only place in the library that erases a
+ * type.
+ *
+ * Its main use is mixed pieces: `Piecewise<AnyFunction1D<double, double>>`
+ * lets one layer be a spline and the next a polynomial, with `Piecewise`
+ * itself unchanged and knowing nothing about it.
+ *
+ * Two consequences worth stating plainly. Construction allocates once, and
+ * evaluation is a virtual call rather than an inlined one, so this is slower
+ * than the static path and should not be reached for by default. And the held
+ * function is shared rather than cloned on copy: `Function1D` exposes nothing
+ * that can mutate it, so sharing is unobservable, and it keeps this type
+ * copyable even when what it holds is move-only — which a piece that owns its
+ * samples always is.
+ *
+ * `Evaluate<N>` is a template, so the erased interface has to fix how far it
+ * goes; `MaxOrder` sets that, and asking for more is a compile error rather
+ * than a wrong answer.
+ *
+ * @tparam R Abscissa precision.
+ * @tparam S Value type, real or complex.
+ * @tparam MaxOrder Highest derivative order the erased interface carries.
+ */
+template <typename R, typename S, std::size_t MaxOrder = 3>
+    requires ::Interpolation::Real<R> && RealOrComplex<S>
+class AnyFunction1D {
+  public:
+    /** @brief Abscissa precision. */
+    using Real = R;
+    /** @brief Value type, real or complex. */
+    using Scalar = S;
+
+    /** @brief Highest derivative order this type can be asked for. */
+    static constexpr std::size_t HighestOrder = MaxOrder;
+
+    /** @brief Hold a copy of `f`. */
+    template <typename F>
+        requires Function1D<std::remove_cvref_t<F>> &&
+                 (!std::same_as<std::remove_cvref_t<F>, AnyFunction1D>)
+    AnyFunction1D(F &&f)
+        : _held{std::make_shared<const Model<std::remove_cvref_t<F>>>(
+              std::forward<F>(f))} {}
+
+    /**
+     * @brief Evaluate the held function or its `N`th derivative.
+     * @tparam N Derivative order, at most `MaxOrder`.
+     * @param x Query abscissa.
+     */
+    template <std::size_t N = 0> Scalar Evaluate(Real x) const {
+        static_assert(N <= MaxOrder,
+                      "AnyFunction1D erases derivatives only up to MaxOrder; "
+                      "raise it on the type if a higher order is needed.");
+        return _held->Evaluate(N, x);
+    }
+
+    /** @brief Evaluate the held function; the same as `Evaluate<0>`. */
+    Scalar operator()(Real x) const { return Evaluate<0>(x); }
+
+  private:
+    struct Interface {
+        virtual ~Interface() = default;
+        virtual Scalar Evaluate(std::size_t n, Real x) const = 0;
+    };
+
+    template <typename F> struct Model final : Interface {
+        F held;
+
+        explicit Model(F f) : held{std::move(f)} {}
+
+        Scalar Evaluate(std::size_t n, Real x) const override {
+            return Dispatch(n, x, std::make_index_sequence<MaxOrder + 1>{});
+        }
+
+        // Turn the run-time order back into a compile-time one by trying each
+        // in turn; the fold stops at the first match.
+        template <std::size_t... K>
+        Scalar Dispatch(std::size_t n, Real x,
+                        std::index_sequence<K...>) const {
+            auto result = Scalar{};
+            (void) ((n == K ? (result = static_cast<Scalar>(
+                                   held.template Evaluate<K>(x)),
+                               true)
+                            : false) ||
+                    ...);
+            return result;
+        }
+    };
+
+    std::shared_ptr<const Interface> _held;
+};
+
+/** @brief Erase the type of `f`, keeping its abscissa and value types. */
+template <Function1D F>
+auto
+AnyFunction(F f) {
+    return AnyFunction1D<typename F::Real, typename F::Scalar>{std::move(f)};
+}
 
 // ---------------------------------------------------------------------------
 // Nodes

@@ -121,24 +121,87 @@ TEST(BicubicSpline, PassesThroughEveryGridPoint) {
 TEST(BicubicSpline, ReducesToTheOneDimensionalSplineAlongAConstantAxis) {
     // With the second axis carrying no variation, the tensor product must
     // collapse onto the ordinary one-dimensional spline in the first axis.
+    // This has to hold for whichever edge condition is in force, so both are
+    // checked against a 1D spline built the same way.
     const auto v =
         SampleGrid(kX, kY, [](double a, double) { return std::sin(a); });
-    const Interpolation::BicubicSpline surface{kX, kY, v};
 
     std::vector<double> line;
     for (const auto xi : kX) {
         line.push_back(std::sin(xi));
     }
-    const Interpolation::CubicSpline curve{kX, line};
 
-    for (const double px : {0.2, 0.7, 1.4, 2.5, 3.0}) {
-        SCOPED_TRACE(px);
-        InterpolationTest::ExpectScaledNear(surface(px, 2.0), curve(px));
-        InterpolationTest::ExpectScaledNear(surface.Evaluate<1, 0>(px, 2.0),
-                                            curve.Evaluate<1>(px));
-        InterpolationTest::ExpectScaledNear(surface.Evaluate<2, 0>(px, 2.0),
-                                            curve.Evaluate<2>(px));
+    for (const auto edge : {Interpolation::BoundaryCondition::NotAKnot,
+                            Interpolation::BoundaryCondition::Natural}) {
+        SCOPED_TRACE(edge == Interpolation::BoundaryCondition::NotAKnot
+                         ? "not-a-knot"
+                         : "natural");
+        const Interpolation::BicubicSpline surface{kX, kY, v, edge};
+        const Interpolation::CubicSpline curve{kX, line, edge, 0.0, edge, 0.0};
+
+        for (const double px : {0.2, 0.7, 1.4, 2.5, 3.0}) {
+            SCOPED_TRACE(px);
+            InterpolationTest::ExpectScaledNear(surface(px, 2.0), curve(px));
+            InterpolationTest::ExpectScaledNear(
+                surface.template Evaluate<1, 0>(px, 2.0),
+                curve.template Evaluate<1>(px));
+            InterpolationTest::ExpectScaledNear(
+                surface.template Evaluate<2, 0>(px, 2.0),
+                curve.template Evaluate<2>(px));
+        }
     }
+}
+
+TEST(BicubicSpline, NotAKnotReproducesACubicSurfaceExactly) {
+    // The point of not-a-knot: it imposes nothing false at the boundary, so a
+    // bicubic surface comes back exactly, right up to the edges, where the
+    // natural condition forces a wrong second derivative.
+    const auto surface = [](double a, double b) {
+        return 1.0 + a * a * a + 2.0 * b * b * b - 0.5 * a * a * b;
+    };
+    const std::vector<double> x{0.0, 0.4, 1.3, 1.9, 3.0};
+    const std::vector<double> y{0.0, 0.7, 1.1, 2.2, 2.5, 3.0};
+    const auto v = SampleGrid(x, y, surface);
+
+    const Interpolation::BicubicSpline exact{
+        x, y, v, Interpolation::BoundaryCondition::NotAKnot};
+    const Interpolation::BicubicSpline natural{
+        x, y, v, Interpolation::BoundaryCondition::Natural};
+
+    double worstNotAKnot = 0.0;
+    double worstNatural = 0.0;
+    for (int a = 0; a <= 30; ++a) {
+        for (int b = 0; b <= 30; ++b) {
+            const double px = 3.0 * a / 30.0;
+            const double py = 3.0 * b / 30.0;
+            const double truth = surface(px, py);
+            worstNotAKnot =
+                std::max(worstNotAKnot, std::abs(exact(px, py) - truth));
+            worstNatural =
+                std::max(worstNatural, std::abs(natural(px, py) - truth));
+        }
+    }
+
+    EXPECT_LT(worstNotAKnot, 1.0e-10);
+    EXPECT_GT(worstNatural, 1.0e-3)
+        << "the natural condition should visibly fail on cubic data";
+}
+
+TEST(BicubicSpline, NotAKnotNeedsFourNodesPerAxisAndRejectsClamped) {
+    const std::vector<double> shortAxis{0.0, 1.0, 2.0};
+    const auto v =
+        SampleGrid(shortAxis, kY, [](double a, double b) { return a * b; });
+    EXPECT_THROW((Interpolation::BicubicSpline{shortAxis, kY, v}),
+                 std::invalid_argument);
+    // Natural still works with three nodes.
+    EXPECT_NO_THROW((Interpolation::BicubicSpline{
+        shortAxis, kY, v, Interpolation::BoundaryCondition::Natural}));
+
+    const auto full =
+        SampleGrid(kX, kY, [](double a, double b) { return a * b; });
+    EXPECT_THROW((Interpolation::BicubicSpline{
+                     kX, kY, full, Interpolation::BoundaryCondition::Clamped}),
+                 std::invalid_argument);
 }
 
 TEST(BicubicSpline, IsFarMoreAccurateThanBilinearInTheInterior) {

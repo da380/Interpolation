@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <ranges>
 #include <span>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -18,7 +19,17 @@ enum class BoundaryCondition {
     /** The endpoint second derivative is zero. */
     Natural,
     /** The endpoint first derivative is supplied by the caller. */
-    Clamped
+    Clamped,
+    /**
+     * @brief The third derivative is continuous across the first and last
+     * interior knots.
+     *
+     * Imposes nothing false at the boundary, so a cubic is reproduced exactly
+     * and the scheme stays fourth order right up to the ends, where Natural
+     * costs an order. It is a condition on the whole system rather than on one
+     * endpoint, so it must be used at both ends and needs at least four nodes.
+     */
+    NotAKnot
 };
 
 /**
@@ -54,8 +65,19 @@ class CubicSpline {
     CubicSpline(XView x, YView y, BoundaryCondition left, Scalar leftDerivative,
                 BoundaryCondition right, Scalar rightDerivative)
         : _x{std::move(x)}, _y{std::move(y)} {
-        Detail::ValidateSamples(_x, _y, 2, "CubicSpline");
-        Solve(left, leftDerivative, right, rightDerivative);
+        const auto notAKnot = left == BoundaryCondition::NotAKnot;
+        if (notAKnot != (right == BoundaryCondition::NotAKnot)) {
+            throw std::invalid_argument(
+                "CubicSpline: NotAKnot constrains the whole system rather "
+                "than one endpoint, so it must be used at both ends or "
+                "neither");
+        }
+        Detail::ValidateSamples(_x, _y, notAKnot ? 4 : 2, "CubicSpline");
+        if (notAKnot) {
+            SolveNotAKnot();
+        } else {
+            Solve(left, leftDerivative, right, rightDerivative);
+        }
     }
 
     /** @brief Construct a natural spline, with Natural at both endpoints. */
@@ -150,6 +172,28 @@ class CubicSpline {
     // complex, so only the right-hand side carries the ordinate type. The
     // right-hand side is built in _ypp, which the solve overwrites with the
     // solution.
+    // Not-a-knot is solved in slope form and converted, for the reasons set
+    // out on Detail::NotAKnotCurvatures.
+    void SolveNotAKnot() {
+        const auto n = Size();
+        std::vector<Real> nodes(n);
+        std::vector<Scalar> values(n);
+        for (std::size_t i = 0; i < n; ++i) {
+            nodes[i] = _x[i];
+            values[i] = _y[i];
+        }
+
+        _ypp.assign(n, Scalar{});
+        std::vector<Real> sub(n), diag(n), super(n);
+        std::vector<Scalar> slope(n);
+
+        Detail::NotAKnotCurvatures<Real, Scalar>(
+            std::span<const Real>{nodes}, std::span<const Scalar>{values},
+            std::span<Scalar>{_ypp}, std::span<Real>{sub},
+            std::span<Real>{diag}, std::span<Real>{super},
+            std::span<Scalar>{slope});
+    }
+
     void Solve(BoundaryCondition left, Scalar leftDerivative,
                BoundaryCondition right, Scalar rightDerivative) {
         const auto n = Size();

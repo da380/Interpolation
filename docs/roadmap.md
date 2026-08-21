@@ -235,10 +235,11 @@ to swap for `mdspan` when a toolchain provides it. `Bilinear` and
 API is untouched: the same expression from phase 3 evaluates to the same value
 against an install tree.
 
-Known limitation: the natural condition on all four edges leaves an O(h^2)
-error near the boundary, so global worst-case convergence is second order even
-though the interior is fourth. Not-a-knot conditions are the natural next
-step.
+Follow-up: not-a-knot end conditions are implemented and are the default for
+`BicubicSpline`, which removes that limitation. Global convergence is fourth
+order, about 770x better than natural at 65 by 65 on sin(x)cos(y).
+`AnyFunction1D` supplies the type erasure that gives `Piecewise` mixed piece
+kinds, and the examples are a numbered series in `examples/`.
 
 ## Correctness items folded into the above
 

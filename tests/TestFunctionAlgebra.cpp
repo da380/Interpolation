@@ -347,3 +347,95 @@ TEST(FunctionAlgebra, HigherDerivativesComposeAndStayAllocationFree) {
                                  << (after - before) << " times";
     }
 }
+
+TEST(AnyFunction1D, HoldsDifferentKindsBehindOneType) {
+    using namespace Interpolation;
+    using Any = AnyFunction1D<double, double>;
+    static_assert(Function1D<Any>);
+
+    const std::vector<double> x{0.0, 1.0, 2.0, 3.0};
+    const auto y = Cubes(x);
+
+    const CubicSpline spline{x, y};
+    const Polynomial<double> polynomial{1.0, 2.0, 3.0};
+    const Linear linear{x, y};
+
+    std::vector<Any> mixed;
+    mixed.emplace_back(spline);
+    mixed.emplace_back(polynomial);
+    mixed.emplace_back(linear);
+
+    InterpolationTest::ExpectScaledNear(mixed[0](1.5), spline(1.5));
+    InterpolationTest::ExpectScaledNear(mixed[1](1.5), polynomial(1.5));
+    InterpolationTest::ExpectScaledNear(mixed[2](1.5), linear(1.5));
+
+    InterpolationTest::ExpectScaledNear(mixed[0].Evaluate<1>(1.5),
+                                        spline.Evaluate<1>(1.5));
+    InterpolationTest::ExpectScaledNear(mixed[1].Evaluate<2>(1.5),
+                                        polynomial.Evaluate<2>(1.5));
+}
+
+TEST(AnyFunction1D, IsCopyableEvenWhenWhatItHoldsIsNot) {
+    using namespace Interpolation;
+    using Any = AnyFunction1D<double, double>;
+
+    // An interpolator built from rvalues owns its samples and is move-only,
+    // so a clone-on-copy erasure could not hold it. Sharing immutable state
+    // can, and the copy is independent as far as the interface allows.
+    Any owning{CubicSpline{std::vector<double>{0.0, 1.0, 2.0, 3.0},
+                           std::vector<double>{0.0, 1.0, 8.0, 27.0}}};
+    Any copy = owning;
+    Any assigned{Polynomial<double>{1.0}};
+    assigned = copy;
+
+    InterpolationTest::ExpectScaledNear(copy(1.5), owning(1.5));
+    InterpolationTest::ExpectScaledNear(assigned(1.5), owning(1.5));
+
+    // It therefore enters the algebra by value, with no Ref needed.
+    const auto g = Derivative(copy) * copy + 2.0;
+    InterpolationTest::ExpectScaledNear(
+        g(1.5), owning.Evaluate<1>(1.5) * owning(1.5) + 2.0);
+}
+
+TEST(AnyFunction1D, GivesPiecewiseMixedPieceKinds) {
+    using namespace Interpolation;
+    using Any = AnyFunction1D<double, double>;
+
+    const std::vector<double> x{0.0, 1.0, 2.0, 3.0};
+    const auto y = Cubes(x);
+
+    // Piecewise knows nothing about erasure; it simply holds one type, which
+    // here happens to be one that can hold anything.
+    std::vector<Any> pieces;
+    pieces.emplace_back(Linear{x, y});
+    pieces.emplace_back(Polynomial<double>{100.0, 1.0});
+
+    const Piecewise<Any> layered{{0.0, 3.0, 6.0}, std::move(pieces)};
+    EXPECT_EQ(layered.PieceCount(), 2u);
+
+    const Linear reference{x, y};
+    InterpolationTest::ExpectScaledNear(layered(1.5), reference(1.5));
+    InterpolationTest::ExpectScaledNear(layered(4.0), 104.0);
+
+    const auto [below, above] = layered.Limits(3.0);
+    InterpolationTest::ExpectScaledNear(below, 27.0);
+    InterpolationTest::ExpectScaledNear(above, 103.0);
+
+    // An extracted layer still works on its own.
+    const auto outer = layered.Piece(1);
+    InterpolationTest::ExpectScaledNear(outer.Lower(), 3.0);
+    InterpolationTest::ExpectScaledNear(outer(5.0), 105.0);
+}
+
+TEST(AnyFunction1D, HonoursItsMaxOrder) {
+    using namespace Interpolation;
+    // Two orders is enough for a value, a slope and a curvature.
+    using Any = AnyFunction1D<double, double, 2>;
+    static_assert(Any::HighestOrder == 2);
+
+    const Any p{Polynomial<double>{1.0, 2.0, 3.0}};
+    const Polynomial<double> reference{1.0, 2.0, 3.0};
+    InterpolationTest::ExpectScaledNear(p.Evaluate<2>(1.5),
+                                        reference.Evaluate<2>(1.5));
+    // p.Evaluate<3>(1.5) is a compile error rather than a wrong answer.
+}

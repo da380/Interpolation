@@ -4,10 +4,12 @@
 #include <cstddef>
 #include <ranges>
 #include <span>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
 #include <Interpolation/Concepts.hpp>
+#include <Interpolation/CubicSpline.hpp>
 #include <Interpolation/Grid.hpp>
 #include <Interpolation/Samples.hpp>
 
@@ -53,13 +55,27 @@ class BicubicSpline {
      * @param x First-axis abscissae, strictly increasing, at least two.
      * @param y Second-axis abscissae, strictly increasing, at least two.
      * @param values `size(x) * size(y)` values in row-major order.
+     * @param edge Condition applied on all four edges. NotAKnot is the
+     *        default because it keeps the scheme fourth order at the
+     *        boundary, where Natural costs an order; it needs at least four
+     *        nodes on each axis.
      * @throws std::invalid_argument if an axis is too short or not strictly
-     *         increasing, or the value count does not match the axes.
+     *         increasing, the value count does not match the axes, or
+     *         Clamped is requested.
      */
-    BicubicSpline(XView x, YView y, VView values)
+    BicubicSpline(XView x, YView y, VView values,
+                  BoundaryCondition edge = BoundaryCondition::NotAKnot)
         : _x{std::move(x)}, _y{std::move(y)}, _v{std::move(values)} {
-        Detail::ValidateGrid(_x, _y, _v, 2, "BicubicSpline");
-        Solve();
+        if (edge == BoundaryCondition::Clamped) {
+            throw std::invalid_argument(
+                "BicubicSpline: Clamped would need a prescribed derivative "
+                "along every edge, which this constructor does not take; use "
+                "NotAKnot or Natural");
+        }
+        Detail::ValidateGrid(_x, _y, _v,
+                             edge == BoundaryCondition::NotAKnot ? 4 : 2,
+                             "BicubicSpline");
+        Solve(edge);
     }
 
     /** @brief Number of nodes along the first axis. */
@@ -134,7 +150,7 @@ class BicubicSpline {
         return _mxy[i * _columns + j];
     }
 
-    void Solve() {
+    void Solve(BoundaryCondition edge) {
         _rows = static_cast<std::size_t>(std::ranges::size(_x));
         _columns = static_cast<std::size_t>(std::ranges::size(_y));
 
@@ -157,19 +173,37 @@ class BicubicSpline {
         std::vector<Scalar> line(longest);
         std::vector<Scalar> result(longest);
         std::vector<Real> sub(longest), diag(longest), super(longest);
+        std::vector<Scalar> slope(longest);
+
+        // One line solve, with whichever edge condition was asked for. The
+        // scratch buffers are allocated once for the whole grid rather than
+        // once per line.
+        const auto solveLine = [&](std::span<const Real> nodes,
+                                   std::size_t count) {
+            if (edge == BoundaryCondition::NotAKnot) {
+                Detail::NotAKnotCurvatures<Real, Scalar>(
+                    nodes, std::span<const Scalar>{line.data(), count},
+                    std::span<Scalar>{result.data(), count},
+                    std::span<Real>{sub.data(), count},
+                    std::span<Real>{diag.data(), count},
+                    std::span<Real>{super.data(), count},
+                    std::span<Scalar>{slope.data(), count});
+            } else {
+                Detail::NaturalCurvatures<Real, Scalar>(
+                    nodes, std::span<const Scalar>{line.data(), count},
+                    std::span<Scalar>{result.data(), count},
+                    std::span<Real>{sub.data(), count},
+                    std::span<Real>{diag.data(), count},
+                    std::span<Real>{super.data(), count});
+            }
+        };
 
         const auto solveAlongX = [&](auto read, auto write) {
             for (std::size_t j = 0; j < _columns; ++j) {
                 for (std::size_t i = 0; i < _rows; ++i) {
                     line[i] = read(i, j);
                 }
-                Detail::NaturalCurvatures<Real, Scalar>(
-                    std::span<const Real>{xNodes},
-                    std::span<const Scalar>{line.data(), _rows},
-                    std::span<Scalar>{result.data(), _rows},
-                    std::span<Real>{sub.data(), _rows},
-                    std::span<Real>{diag.data(), _rows},
-                    std::span<Real>{super.data(), _rows});
+                solveLine(std::span<const Real>{xNodes}, _rows);
                 for (std::size_t i = 0; i < _rows; ++i) {
                     write(i, j, result[i]);
                 }
@@ -181,13 +215,7 @@ class BicubicSpline {
                 for (std::size_t j = 0; j < _columns; ++j) {
                     line[j] = read(i, j);
                 }
-                Detail::NaturalCurvatures<Real, Scalar>(
-                    std::span<const Real>{yNodes},
-                    std::span<const Scalar>{line.data(), _columns},
-                    std::span<Scalar>{result.data(), _columns},
-                    std::span<Real>{sub.data(), _columns},
-                    std::span<Real>{diag.data(), _columns},
-                    std::span<Real>{super.data(), _columns});
+                solveLine(std::span<const Real>{yNodes}, _columns);
                 for (std::size_t j = 0; j < _columns; ++j) {
                     write(i, j, result[j]);
                 }
@@ -212,10 +240,10 @@ class BicubicSpline {
 
 /// Borrow lvalue containers and own rvalue ones.
 template <std::ranges::viewable_range X, std::ranges::viewable_range Y,
-          std::ranges::viewable_range V>
-BicubicSpline(X &&, Y &&,
-              V &&) -> BicubicSpline<std::views::all_t<X>, std::views::all_t<Y>,
-                                     std::views::all_t<V>>;
+          std::ranges::viewable_range V, typename... Rest>
+BicubicSpline(X &&, Y &&, V &&, Rest...)
+    -> BicubicSpline<std::views::all_t<X>, std::views::all_t<Y>,
+                     std::views::all_t<V>>;
 
 } // namespace Interpolation
 

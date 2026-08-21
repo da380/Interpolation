@@ -27,6 +27,15 @@ second derivatives `M_i = S''(x_i)`.
 - `BoundaryCondition::Natural` means `M=0` at that endpoint.
 - `BoundaryCondition::Clamped` means `S'` at that endpoint equals the supplied
   derivative.
+- `BoundaryCondition::NotAKnot` makes the third derivative continuous across
+  the first and last interior knots, so the first two pieces are one cubic
+  and the last two another. It imposes nothing false at the boundary, needs
+  no extra information, and reproduces a cubic exactly. It constrains the
+  whole system rather than one endpoint, so it applies at both ends and
+  needs at least four nodes. It is solved in the nodal-slope formulation
+  and converted back to curvatures: written directly in curvatures its
+  boundary row leaves the tridiagonal band, and eliminating that entry
+  produces a leading coefficient that vanishes on a uniform grid.
 
 The three-argument constructor is Free/Free, commonly called a natural spline.
 Mixed Free/Clamped combinations are supported. The implementation assembles the
@@ -174,11 +183,18 @@ That last one is what makes it a true tensor product rather than two
 independent one-dimensional fits. Evaluation then needs only the sixteen
 corner quantities of the containing cell and allocates nothing.
 
-The natural condition is applied on all four edges, which fixes the second
-derivative to zero there. In the interior the scheme is fourth order; near the
-boundary the natural condition contributes an \f$O(h^2)\f$ error, so the global
-worst-case error converges at second order. Measured on
-\f$\sin x \cos y\f$ over a 33 by 33 grid, the interior error is around
-\f$5\times 10^{-7}\f$ against \f$1.7\times 10^{-3}\f$ for bilinear on the
-same data. Not-a-knot end conditions would lift the boundary order and are the
-natural next improvement.
+The edge condition applies on all four edges and defaults to not-a-knot, which
+keeps the scheme fourth order there. The natural condition is also available
+and needs only three nodes per axis, but it fixes the second derivative to zero
+at the edges, which the data rarely satisfies, and the resulting
+\f$O(h^2)\f$ boundary error drags global convergence down to second order.
+Measured on \f$\sin x \cos y\f$, worst error over the whole square:
+
+| grid | natural | not-a-knot |
+| --- | --- | --- |
+| 9 x 9 | \f$7.0\times10^{-3}\f$ | \f$5.1\times10^{-4}\f$ |
+| 17 x 17 | \f$1.7\times10^{-3}\f$ | \f$3.4\times10^{-5}\f$ |
+| 33 x 33 | \f$4.3\times10^{-4}\f$ | \f$2.2\times10^{-6}\f$ |
+| 65 x 65 | \f$4.2\times10^{-5}\f$ | \f$5.4\times10^{-8}\f$ |
+
+Not-a-knot converges at fourth order globally; natural does not.

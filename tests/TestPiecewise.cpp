@@ -264,3 +264,59 @@ TEST(FunctionRef, BorrowsWithoutCopying) {
     }
     EXPECT_EQ(&borrowed.Function(), &s);
 }
+
+TEST(CubicSpline, NotAKnotReproducesACubicExactly) {
+    // Nonuniform, with a deliberately large spacing ratio.
+    const std::vector<double> x{0.0, 0.31, 1.4, 1.55, 3.2, 5.0, 5.05, 7.0};
+    const auto cubic = [](double v) {
+        return 2.0 - 0.5 * v + 0.25 * v * v + 1.5 * v * v * v;
+    };
+    std::vector<double> y;
+    for (const auto v : x) {
+        y.push_back(cubic(v));
+    }
+
+    const Interpolation::CubicSpline notAKnot{
+        x,
+        y,
+        Interpolation::BoundaryCondition::NotAKnot,
+        0.0,
+        Interpolation::BoundaryCondition::NotAKnot,
+        0.0};
+    const Interpolation::CubicSpline natural{x, y};
+
+    double worstNotAKnot = 0.0;
+    double worstNatural = 0.0;
+    for (int i = 0; i <= 700; ++i) {
+        const double q = 7.0 * i / 700.0;
+        worstNotAKnot =
+            std::max(worstNotAKnot, std::abs(notAKnot(q) - cubic(q)));
+        worstNatural = std::max(worstNatural, std::abs(natural(q) - cubic(q)));
+    }
+    EXPECT_LT(worstNotAKnot, 1.0e-9);
+    EXPECT_GT(worstNatural, 1.0);
+
+    // Derivatives are exact too.
+    InterpolationTest::ExpectScaledNear(notAKnot.Evaluate<1>(2.5),
+                                        -0.5 + 0.5 * 2.5 + 4.5 * 2.5 * 2.5);
+    InterpolationTest::ExpectScaledNear(notAKnot.Evaluate<2>(2.5),
+                                        0.5 + 9.0 * 2.5);
+}
+
+TEST(CubicSpline, NotAKnotMustBeUsedAtBothEnds) {
+    const std::vector<double> x{0.0, 1.0, 2.0, 3.0, 4.0};
+    const std::vector<double> y{0.0, 1.0, 8.0, 27.0, 64.0};
+
+    EXPECT_THROW((Interpolation::CubicSpline{
+                     x, y, Interpolation::BoundaryCondition::NotAKnot, 0.0,
+                     Interpolation::BoundaryCondition::Natural, 0.0}),
+                 std::invalid_argument);
+
+    // And it needs four nodes.
+    const std::vector<double> few{0.0, 1.0, 2.0};
+    const std::vector<double> fewY{0.0, 1.0, 8.0};
+    EXPECT_THROW((Interpolation::CubicSpline{
+                     few, fewY, Interpolation::BoundaryCondition::NotAKnot, 0.0,
+                     Interpolation::BoundaryCondition::NotAKnot, 0.0}),
+                 std::invalid_argument);
+}

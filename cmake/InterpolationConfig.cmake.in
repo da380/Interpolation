@@ -1,0 +1,9 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(NumericConcepts)
+
+include("${CMAKE_CURRENT_LIST_DIR}/InterpolationTargets.cmake")
+
+check_required_components(Interpolation)

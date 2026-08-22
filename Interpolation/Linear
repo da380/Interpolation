@@ -1,7 +1,0 @@
-#ifndef INTERPOLATION_LINEAR_MODULE_H
-#define INTERPOLATION_LINEAR_MODULE_H
-
-#include "src/Concepts.h"
-#include "src/Linear.h"
-
-#endif  

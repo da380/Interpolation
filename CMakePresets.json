@@ -1,0 +1,78 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 24, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "INTERPOLATION_BUILD_TESTS": "ON",
+        "INTERPOLATION_BUILD_EXAMPLES": "ON"
+      }
+    },
+    {
+      "name": "gcc-14",
+      "inherits": "base",
+      "displayName": "GCC 14, Release",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "g++-14",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "clang-18",
+      "inherits": "base",
+      "displayName": "Clang 18, Release",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++-18",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Default compiler, Debug",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "asan",
+      "inherits": "base",
+      "displayName": "AddressSanitizer and UndefinedBehaviorSanitizer",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+      }
+    },
+    {
+      "name": "docs",
+      "inherits": "base",
+      "displayName": "Documentation only",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "INTERPOLATION_BUILD_DOCS": "ON",
+        "INTERPOLATION_BUILD_TESTS": "OFF",
+        "INTERPOLATION_BUILD_EXAMPLES": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "gcc-14",   "configurePreset": "gcc-14" },
+    { "name": "clang-18", "configurePreset": "clang-18" },
+    { "name": "debug",    "configurePreset": "debug" },
+    { "name": "asan",     "configurePreset": "asan" },
+    { "name": "docs",     "configurePreset": "docs", "targets": ["InterpolationDocs"] }
+  ],
+  "testPresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    { "name": "gcc-14",   "inherits": "base", "configurePreset": "gcc-14" },
+    { "name": "clang-18", "inherits": "base", "configurePreset": "clang-18" },
+    { "name": "debug",    "inherits": "base", "configurePreset": "debug" },
+    { "name": "asan",     "inherits": "base", "configurePreset": "asan" }
+  ]
+}

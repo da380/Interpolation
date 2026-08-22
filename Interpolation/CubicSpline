@@ -1,7 +1,0 @@
-#ifndef INTERPOLATION_CUBIC_SPLINE_MODULE_H
-#define INTERPOLATION_CUBIC_SPLINE_MODULE_H
-
-#include "src/Concepts.h"
-#include "src/CubicSpline.h"
-
-#endif  

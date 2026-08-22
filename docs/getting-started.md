@@ -6,16 +6,21 @@ Each public forwarding header exposes one facility:
 
 | Header | Public API |
 | --- | --- |
-| `<Interpolation/Linear>` | `Linear` |
-| `<Interpolation/CubicSpline>` | `CubicSpline`, `CubicSplineBC` |
-| `<Interpolation/AkimaSpline>` | `Akima` |
-| `<Interpolation/Lagrange>` | `Lagrange`, `LagrangePolynomial` |
-| `<Interpolation/Polynomial>` | `Polynomial1D` |
-| `<Interpolation/All>` | All of the above and the public concepts |
+| `<Interpolation/Linear.hpp>` | `Linear` |
+| `<Interpolation/CubicSpline.hpp>` | `CubicSpline`, `BoundaryCondition` |
+| `<Interpolation/AkimaSpline.hpp>` | `AkimaSpline` |
+| `<Interpolation/Lagrange.hpp>` | `Lagrange`, `LagrangeBasis` |
+| `<Interpolation/Polynomial.hpp>` | `Polynomial` |
+| `<Interpolation/Bilinear.hpp>` | `Bilinear` |
+| `<Interpolation/BicubicSpline.hpp>` | `BicubicSpline` |
+| `<Interpolation/Piecewise.hpp>` | `Piecewise`, `PieceView`, `Side`, `SplitAtRepeats` |
+| `<Interpolation/Grid.hpp>` | `Extents`, `Extents2D`, `Grid2DView` |
+| `<Interpolation/Function.hpp>` | `Function1D`, the operators, `Derivative`, `Compose`, `Primitive` |
+| `<Interpolation/Interpolation.hpp>` | All of the above and the public concepts |
 
-Interp is header-only. Link the CMake interface target `Interpolation` so the
-include directory, C++ standard, Eigen dependency, and transitive requirements
-are supplied consistently.
+Interpolation is header-only and has no external dependencies. Link the CMake
+interface target `Interpolation::Interpolation` so the include directory and
+the C++ standard are supplied consistently.
 
 ## Add Interp to a project
 
@@ -29,30 +34,48 @@ target_link_libraries(my_target PRIVATE Interpolation)
 For a remote dependency, use the `FetchContent` example in the README and pin a
 reviewed immutable commit or tag.
 
-Interp currently has no standalone install/export packaging. Consumers should
-use `FetchContent` or `add_subdirectory`.
+Interpolation installs and exports, so `find_package(Interpolation)` also
+works against an install tree.
 
 ## Sample ownership and input rules
 
-`Linear`, `CubicSpline`, `Akima`, `Lagrange`, and `LagrangePolynomial` retain
-random-access iterators into caller-owned data. Their source containers must:
+Every interpolator takes ranges, and what it does with them follows from the
+value category of the argument:
 
-1. outlive the interpolation object;
-2. remain at the same memory location; and
-3. not be resized or otherwise reallocated.
+- an **lvalue** container is **borrowed**. It must outlive the interpolator
+  and must not be reallocated, exactly as the old iterator-based API required;
+- an **rvalue** is **owned**. The data is moved in, so the interpolator can be
+  returned from a function or stored beyond the lifetime of its source.
 
-The ordinate range must contain at least as many values as the abscissa range.
-Abscissae are real and strictly increasing; duplicate nodes cause division by
-zero in the interpolation formulas.
+The splines compute their coefficients once, at construction. Changing a
+borrowed container afterwards leaves the new samples paired with the old
+coefficients, which is neither the old interpolant nor the new one; build a
+fresh object instead.
+
+```cpp
+Interpolation::CubicSpline borrowing{x, y};                       // ref_view
+Interpolation::CubicSpline owning{std::move(x), std::move(y)};    // owning_view
+```
+
+Input is checked at construction, which throws `std::invalid_argument` if the
+ranges differ in length, are too short for the method, or the abscissae are
+not strictly increasing. Abscissae must be **strictly** increasing: a repeated
+node is not an encoding for a discontinuity, and every method here divides by
+a node difference somewhere. Represent a piecewise-continuous function with
+`Piecewise`, which is built for exactly that, and use `SplitAtRepeats` if your
+samples use a doubled abscissa to mark the jump.
 
 | Routine | Input precondition | Query behavior |
 | --- | --- | --- |
 | `Linear` | At least 2 nodes | Extrapolates with the first or final line segment |
-| `CubicSpline` | At least 2 nodes | Extrapolates with the first or final cubic segment |
-| `Akima` | At least 3 nodes | Extrapolates with the first or final cubic segment |
+| `CubicSpline` | At least 2 nodes, or 4 for not-a-knot | Extrapolates with the first or final cubic segment |
+| `AkimaSpline` | At least 3 nodes | Extrapolates with the first or final cubic segment |
 | `Lagrange` | At least 1 node | Evaluates the global polynomial for any real query |
-| `LagrangePolynomial` | At least 1 node | Evaluates the selected basis polynomial for any real query |
-| `Polynomial1D` | Defaults to zero; explicit input needs at least 1 coefficient | Evaluates for any supported scalar argument |
+| `LagrangeBasis` | At least 1 node | Evaluates the selected basis polynomial for any real query |
+| `Polynomial` | Defaults to zero; explicit input needs at least 1 coefficient | Evaluates for any supported scalar argument |
+| `Bilinear` | At least 2 nodes on each axis | Continues the nearest edge cell |
+| `BicubicSpline` | At least 4 nodes on each axis, or 2 with the natural condition | Continues the nearest edge cell |
+| `Piecewise` | At least 1 piece; breakpoints strictly increasing | Nearest piece continues outside the domain |
 
 ## Scalar types
 
@@ -60,19 +83,19 @@ Abscissae must use `float`, `double`, `long double`, or a cv-qualified form of
 one of those real types. Ordinates may use the same real types or
 `std::complex` with a floating-point component type. The abscissa and ordinate
 types must support the conversions and arithmetic required by
-`InterpolationIteratorPair`. Akima calculates its nonnegative interpolation
+`InterpolationRanges`. AkimaSpline calculates its nonnegative interpolation
 weights from real magnitudes, so its cubic values and derivatives support both
 real and complex ordinates.
 
-`Polynomial1D` supports real and complex floating-point coefficient types. Its
+`Polynomial` supports real and complex floating-point coefficient types. Its
 coefficient list is ordered from the constant term upward:
 
 ```cpp
-Interpolation::Polynomial1D<double> p{1.0, -2.0, 3.0};
+Interpolation::Polynomial<double> p{1.0, -2.0, 3.0};
 // p(x) = 1 - 2x + 3x^2
 ```
 
-A default-constructed `Polynomial1D` is the degree-zero polynomial with the
+A default-constructed `Polynomial` is the degree-zero polynomial with the
 single coefficient `0`.
 
 Construction and assignment from a polynomial with a convertible coefficient

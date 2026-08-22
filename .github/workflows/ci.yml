@@ -1,0 +1,250 @@
+name: CI
+
+on:
+  push:
+    branches: [main, refactor]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # The test suite is the behavioural oracle for the refactor. Warnings are
+  # errors here, but only on our own targets: dependencies are fetched SYSTEM
+  # so their headers are not held to our flags.
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: ${{ matrix.compiler }} (${{ matrix.build_type }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++-14, clang++-18]
+        build_type: [Release, Debug]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the compiler
+        run: |
+          sudo apt-get update
+          if [ "${{ matrix.compiler }}" = "g++-14" ]; then
+            sudo apt-get install -y g++-14
+          else
+            sudo apt-get install -y clang-18
+          fi
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: deps-${{ matrix.compiler }}-${{ hashFiles('CMakeLists.txt', 'tests/CMakeLists.txt') }}
+          restore-keys: deps-${{ matrix.compiler }}-
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DINTERPOLATION_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      # One number for both build types. Preconditions now throw rather than
+      # assert, so no test compiles out under NDEBUG and the Release and Debug
+      # counts agree.
+      - name: Check the oracle is intact
+        run: |
+          expected=92
+          count=$(ctest --test-dir build -N | sed -n 's/^Total Tests: //p')
+          echo "Discovered $count tests, expected at least $expected."
+          if [ "$count" -lt "$expected" ]; then
+            echo "::error::Test count $count fell below the baseline of $expected."
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Sanitisers. Debug so that the assert-based preconditions are live, and
+  # -fno-sanitize-recover so a report fails the job rather than being logged.
+  # ---------------------------------------------------------------------------
+  sanitizers:
+    name: ASan and UBSan
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_CXX_COMPILER=g++-14
+          -DCMAKE_BUILD_TYPE=Debug
+          -DINTERPOLATION_WARNINGS_AS_ERRORS=ON
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+
+      - name: Build
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1
+        run: ctest --test-dir build --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # Formatting, pinned to clang-format 18 to match .clang-format.
+  # ---------------------------------------------------------------------------
+  format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format 18
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-18
+
+      - name: Check formatting
+        run: |
+          mapfile -t files < <(find include tests examples \
+            -type f \( -name '*.hpp' -o -name '*.h' -o -name '*.cpp' \) | sort)
+          printf 'Checking %d files.\n' "${#files[@]}"
+          clang-format-18 --dry-run --Werror --style=file "${files[@]}"
+
+  # ---------------------------------------------------------------------------
+  # The install tree is part of the public interface, so it is exercised the
+  # way a consumer would: install, then find_package from a separate project.
+  # ---------------------------------------------------------------------------
+  install:
+    name: find_package from an install tree
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure and install
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$PWD/stage" \
+            -DINTERPOLATION_BUILD_TESTS=OFF \
+            -DINTERPOLATION_BUILD_EXAMPLES=OFF
+          cmake --install build
+
+      - name: Build a consumer against the install tree
+        run: |
+          mkdir -p consumer
+          cat > consumer/CMakeLists.txt <<'CMAKE'
+          cmake_minimum_required(VERSION 3.24)
+          project(Consumer LANGUAGES CXX)
+          find_package(Interpolation 0.1 REQUIRED)
+          add_executable(consumer main.cpp)
+          target_link_libraries(consumer PRIVATE Interpolation::Interpolation)
+          CMAKE
+          cat > consumer/main.cpp <<'CPP'
+          #include <Interpolation/Interpolation.hpp>
+          #include <cstdio>
+          #include <utility>
+          #include <vector>
+
+          // Returned by value, so the spline must own its samples. This is
+          // the case the old iterator-based API could not express.
+          static auto MakeSpline() {
+              return Interpolation::CubicSpline{
+                  std::vector<double>{0.0, 1.0, 2.0, 3.0},
+                  std::vector<double>{0.0, 1.0, 4.0, 9.0}};
+          }
+
+          int main() {
+              const auto s = MakeSpline();
+              std::printf("%.6f %.6f\n", s(1.5), s.Evaluate<1>(1.5));
+              return 0;
+          }
+          CPP
+          cmake -S consumer -B consumer/build -DCMAKE_PREFIX_PATH="$PWD/stage"
+          cmake --build consumer/build
+          ./consumer/build/consumer
+
+  # ---------------------------------------------------------------------------
+  # Documentation is built on every run as a warnings-as-errors check.
+  # Publishing happens only from main, and needs Pages enabled on the
+  # repository with its source set to GitHub Actions.
+  # ---------------------------------------------------------------------------
+  docs:
+    name: Doxygen
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen
+          doxygen --version
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DINTERPOLATION_BUILD_DOCS=ON \
+            -DINTERPOLATION_BUILD_TESTS=OFF \
+            -DINTERPOLATION_BUILD_EXAMPLES=OFF
+
+      # Doxygen runs with WARN_AS_ERROR=FAIL_ON_WARNINGS, so any warning fails
+      # the job. It writes those warnings to stderr, which shows up in the log
+      # but not in the check annotations, so a failure here reads only as
+      # "process completed with exit code 1" anywhere except the raw log. Echo
+      # them as annotations so the actual message is visible in the checks view.
+      - name: Build the documentation
+        run: |
+          echo "::notice::Doxygen $(doxygen --version)"
+          set +e
+          doxygen build/Doxyfile 2> doxygen.log
+          status=$?
+          set -e
+          cat doxygen.log
+          if [ "$status" -ne 0 ]; then
+            head -n 30 doxygen.log | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit "$status"
+          fi
+
+      - name: Upload the documentation
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/docs/html
+
+  deploy-docs:
+    name: Publish documentation
+    needs: docs
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

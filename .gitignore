@@ -1,2 +1,30 @@
+# Build trees
 **/build
+build*/
+cmake-build-*/
+
+# CMake / CTest scratch
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+/Testing/
+DartConfiguration.tcl
+install_manifest.txt
+compile_commands.json
+
+# Generated example output
+*.out
+!*.in
+
+# Documentation output
+docs/html/
+docs/latex/
+Doxyfile
+
+# Editor and OS noise
 **/*~
+*.swp
+.DS_Store
+.cache/
+.vscode/
+.idea/

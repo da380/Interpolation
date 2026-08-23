@@ -43,6 +43,43 @@ tridiagonal system for the nodal second derivatives and solves it with the
 Thomas algorithm, without pivoting, which is safe because the system is
 strictly diagonally dominant.
 
+### The system is separable from the data
+
+That matrix depends on the nodes alone; only the right-hand side carries the
+ordinates. `CubicSplineSystem` is that matrix, assembled and eliminated once,
+with `Solve` applying it to any number of ordinate sets. `CubicSpline` holds
+one and is solved by it, so the spline equations are assembled in exactly one
+place, and `BicubicSpline` builds one system per axis rather than one per line.
+
+The separation is worth naming because "one grid, many datasets" is a common
+shape rather than a special case: the components of a vector field, an
+ensemble of profiles, a line of spectral coefficients at every point of a
+sphere. A caller in that position pays for the factorisation once. `Solve`
+allocates nothing and is `const`, so a fixed system can be shared across
+threads, and because the matrix is real even for complex ordinates the
+ordinate type is a parameter of `Solve` rather than of the class.
+
+`TridiagonalFactorization` sits underneath and is public in its own right, for
+a caller who assembles a different banded system; `SolveTridiagonal` remains
+for the genuinely one-shot case, where keeping the pivots would be waste.
+
+### Evaluating at the nodes
+
+Every one-dimensional interpolator offers `EvaluateAtNodes<N>` and
+`NodeValues<N>`. Evaluating at a node is the one query that needs no search,
+since the segment adjoining each node is known, so the nodal sweep costs a
+single pass where the general path would cost `n log n` lookups. That is the
+other half of what a differentiation operator on a fixed grid wants, and
+`CubicSplineSystem` offers it too, taking the ordinates and curvatures rather
+than holding them.
+
+A value at a node agrees from both sides, as do the first and second
+derivatives of a cubic spline; the third jumps, as does the first derivative of
+a piecewise-linear interpolant. `Side` chooses which limit is reported, and
+defaults to the right-hand one, so the nodal sweep agrees with an ordinary
+query at the same abscissa. This is the same convention `Piecewise` uses across
+its breakpoints, and it is deliberately the only one in the library.
+
 Use a cubic spline for smooth material profiles or other data where continuous
 first and second derivatives matter. Exterior evaluation continues the first
 or final cubic piece and should not be interpreted as a physically constrained

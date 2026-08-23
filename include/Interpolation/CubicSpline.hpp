@@ -9,34 +9,23 @@
 #include <vector>
 
 #include <Interpolation/Concepts.hpp>
+#include <Interpolation/CubicSplineSystem.hpp>
 #include <Interpolation/Samples.hpp>
-#include <Interpolation/Tridiagonal.hpp>
+#include <Interpolation/Side.hpp>
 
 namespace Interpolation {
-
-/** @brief Endpoint conditions for CubicSpline. */
-enum class BoundaryCondition {
-    /** The endpoint second derivative is zero. */
-    Natural,
-    /** The endpoint first derivative is supplied by the caller. */
-    Clamped,
-    /**
-     * @brief The third derivative is continuous across the first and last
-     * interior knots.
-     *
-     * Imposes nothing false at the boundary, so a cubic is reproduced exactly
-     * and the scheme stays fourth order right up to the ends, where Natural
-     * costs an order. It is a condition on the whole system rather than on one
-     * endpoint, so it must be used at both ends and needs at least four nodes.
-     */
-    NotAKnot
-};
 
 /**
  * @brief Piecewise-cubic spline interpolation on ordered sample points.
  *
  * Construction takes ranges, borrowing lvalues and owning rvalues. Queries
  * outside the sample interval continue the first or final cubic piece.
+ *
+ * The linear system is assembled and factorised by CubicSplineSystem, which
+ * this class holds and exposes through System(). A caller fitting many
+ * ordinate sets on one grid should build that system once and solve into its
+ * own buffers rather than constructing a spline per dataset — the matrix
+ * depends on the nodes alone, so there is nothing to recompute.
  *
  * @tparam XView View over real abscissae.
  * @tparam YView View over real or complex ordinates.
@@ -50,6 +39,8 @@ class CubicSpline {
     using Real = std::ranges::range_value_t<XView>;
     /** @brief Ordinate type, real or complex. */
     using Scalar = std::ranges::range_value_t<YView>;
+    /** @brief The factorised system this spline was solved with. */
+    using System = CubicSplineSystem<XView>;
 
     /**
      * @brief Construct a spline with independently chosen endpoint conditions.
@@ -64,20 +55,11 @@ class CubicSpline {
      */
     CubicSpline(XView x, YView y, BoundaryCondition left, Scalar leftDerivative,
                 BoundaryCondition right, Scalar rightDerivative)
-        : _x{std::move(x)}, _y{std::move(y)} {
-        const auto notAKnot = left == BoundaryCondition::NotAKnot;
-        if (notAKnot != (right == BoundaryCondition::NotAKnot)) {
-            throw std::invalid_argument(
-                "CubicSpline: NotAKnot constrains the whole system rather "
-                "than one endpoint, so it must be used at both ends or "
-                "neither");
-        }
-        Detail::ValidateSamples(_x, _y, notAKnot ? 4 : 2, "CubicSpline");
-        if (notAKnot) {
-            SolveNotAKnot();
-        } else {
-            Solve(left, leftDerivative, right, rightDerivative);
-        }
+        : _system{Checked(std::move(x), y, left, right), left, right},
+          _y{std::move(y)} {
+        _ypp.assign(_system.Size(), Scalar{});
+        _system.Solve(_y, leftDerivative, rightDerivative,
+                      std::span<Scalar>{_ypp});
     }
 
     /** @brief Construct a natural spline, with Natural at both endpoints. */
@@ -96,9 +78,7 @@ class CubicSpline {
                       leftDerivative, both,         rightDerivative} {}
 
     /** @brief Number of interpolation nodes. */
-    std::size_t Size() const {
-        return static_cast<std::size_t>(std::ranges::size(_x));
-    }
+    std::size_t Size() const { return _system.Size(); }
 
     /**
      * @brief Evaluate the spline or its `N`th derivative.
@@ -110,20 +90,72 @@ class CubicSpline {
      * @param x Query abscissa.
      */
     template <std::size_t N = 0> Scalar Evaluate(Real x) const {
-        const auto i = Detail::LocateSegment(_x, x);
-        return Detail::SplinePiece<N, Real, Scalar>(_x[i + 1] - _x[i],
-                                                    x - _x[i], _y[i], _y[i + 1],
-                                                    _ypp[i], _ypp[i + 1]);
+        const auto i = Detail::LocateSegment(_system.Nodes(), x);
+        return Detail::SplinePiece<N, Real, Scalar>(
+            _system.Spacing(i), x - _system.Node(i), _y[i], _y[i + 1], _ypp[i],
+            _ypp[i + 1]);
     }
 
     /** @brief Evaluate the spline; the same as `Evaluate<0>`. */
     Scalar operator()(Real x) const { return Evaluate<0>(x); }
 
+    /**
+     * @brief Evaluate the spline, or its `N`th derivative, at every node.
+     *
+     * Writes one value per node into `out`, in node order, without a segment
+     * search: the segment adjoining each node is known. This is what a
+     * differentiation operator on a fixed grid wants, and it is where the
+     * general query path is doing work it need not.
+     *
+     * The third derivative jumps across an interior knot; `side` chooses which
+     * limit is reported, and defaults to the right-hand one, so that
+     * `EvaluateAtNodes<N>(out)` agrees with `Evaluate<N>(Node(k))` for every
+     * `k`. Lower orders agree from both sides to rounding.
+     *
+     * @tparam N Derivative order; `0` is the value itself.
+     * @param out Output, one per node. Overwritten.
+     * @param side Which adjoining segment to answer from at a node.
+     * @throws std::invalid_argument if `out` has the wrong length.
+     */
+    template <std::size_t N = 0>
+    void EvaluateAtNodes(std::span<Scalar> out, Side side = Side::Right) const {
+        _system.template EvaluateAtNodes<N>(_y, _ypp, out, side);
+    }
+
+    /**
+     * @brief The nodal values or `N`th derivatives, in a fresh vector.
+     *
+     * The convenient form of EvaluateAtNodes. It allocates, so a caller
+     * sweeping many lines should keep one buffer and call EvaluateAtNodes.
+     */
+    template <std::size_t N = 0>
+    std::vector<Scalar> NodeValues(Side side = Side::Right) const {
+        std::vector<Scalar> values(Size());
+        EvaluateAtNodes<N>(std::span<Scalar>{values}, side);
+        return values;
+    }
+
     /** @brief Abscissa of node `i`. */
-    Real Node(std::size_t i) const { return _x[i]; }
+    Real Node(std::size_t i) const { return _system.Node(i); }
 
     /** @brief Index of the segment used to evaluate `x`. */
-    std::size_t Segment(Real x) const { return Detail::LocateSegment(_x, x); }
+    std::size_t Segment(Real x) const {
+        return Detail::LocateSegment(_system.Nodes(), x);
+    }
+
+    /**
+     * @brief The factorised system behind this spline.
+     *
+     * Exposed so that a caller who built one spline and then finds it has more
+     * data on the same grid can reuse the factorisation rather than pay for it
+     * again.
+     */
+    const System &SplineSystem() const { return _system; }
+
+    /** @brief The nodal second derivatives. */
+    std::span<const Scalar> Curvatures() const {
+        return std::span<const Scalar>{_ypp};
+    }
 
     /**
      * @brief Integral of segment `i` from its left node over a width `t`.
@@ -143,7 +175,7 @@ class CubicSpline {
      * @f$ h(y_i + y_{i+1})/2 - h^3(M_i + M_{i+1})/24 @f$.
      */
     Scalar SegmentIntegral(std::size_t i, Real t) const {
-        const auto h = _x[i + 1] - _x[i];
+        const auto h = _system.Spacing(i);
         const auto u = t / h;
         const auto v = static_cast<Real>(1) - u;
         constexpr auto half = static_cast<Real>(1) / static_cast<Real>(2);
@@ -163,79 +195,24 @@ class CubicSpline {
     }
 
   private:
-    XView _x;
+    System _system;
     YView _y;
     std::vector<Scalar> _ypp; // Second derivatives at the nodes.
 
-    // Assemble and solve the tridiagonal system for the nodal second
-    // derivatives. The coefficients are real even when the ordinates are
-    // complex, so only the right-hand side carries the ordinate type. The
-    // right-hand side is built in _ypp, which the solve overwrites with the
-    // solution.
-    // Not-a-knot is solved in slope form and converted, for the reasons set
-    // out on Detail::NotAKnotCurvatures.
-    void SolveNotAKnot() {
-        const auto n = Size();
-        std::vector<Real> nodes(n);
-        std::vector<Scalar> values(n);
-        for (std::size_t i = 0; i < n; ++i) {
-            nodes[i] = _x[i];
-            values[i] = _y[i];
+    // Validate the sample pair before the system sees the abscissae on their
+    // own, so that a length mismatch and a bad grid are both reported against
+    // this class rather than against the system it delegates to.
+    static XView Checked(XView x, const YView &y, BoundaryCondition left,
+                         BoundaryCondition right) {
+        const auto notAKnot = left == BoundaryCondition::NotAKnot;
+        if (notAKnot != (right == BoundaryCondition::NotAKnot)) {
+            throw std::invalid_argument(
+                "CubicSpline: NotAKnot constrains the whole system rather "
+                "than one endpoint, so it must be used at both ends or "
+                "neither");
         }
-
-        _ypp.assign(n, Scalar{});
-        std::vector<Real> sub(n), diag(n), super(n);
-        std::vector<Scalar> slope(n);
-
-        Detail::NotAKnotCurvatures<Real, Scalar>(
-            std::span<const Real>{nodes}, std::span<const Scalar>{values},
-            std::span<Scalar>{_ypp}, std::span<Real>{sub},
-            std::span<Real>{diag}, std::span<Real>{super},
-            std::span<Scalar>{slope});
-    }
-
-    void Solve(BoundaryCondition left, Scalar leftDerivative,
-               BoundaryCondition right, Scalar rightDerivative) {
-        const auto n = Size();
-        constexpr auto oneThird = static_cast<Real>(1) / static_cast<Real>(3);
-        constexpr auto oneSixth = static_cast<Real>(1) / static_cast<Real>(6);
-
-        std::vector<Real> sub(n, 0), diag(n, 0), super(n, 0);
-        _ypp.assign(n, Scalar{});
-
-        // Interior rows express continuity of the first derivative.
-        for (std::size_t i = 1; i + 1 < n; ++i) {
-            const auto hPrev = _x[i] - _x[i - 1];
-            const auto hNext = _x[i + 1] - _x[i];
-            sub[i] = oneSixth * hPrev;
-            diag[i] = oneThird * (hPrev + hNext);
-            super[i] = oneSixth * hNext;
-            _ypp[i] = (_y[i + 1] - _y[i]) / hNext - (_y[i] - _y[i - 1]) / hPrev;
-        }
-
-        // A Natural condition states directly that the second derivative
-        // at that endpoint is zero.
-        if (left == BoundaryCondition::Natural) {
-            diag[0] = 1;
-        } else {
-            const auto h = _x[1] - _x[0];
-            diag[0] = oneThird * h;
-            super[0] = oneSixth * h;
-            _ypp[0] = (_y[1] - _y[0]) / h - leftDerivative;
-        }
-
-        if (right == BoundaryCondition::Natural) {
-            diag[n - 1] = 1;
-        } else {
-            const auto h = _x[n - 1] - _x[n - 2];
-            sub[n - 1] = oneSixth * h;
-            diag[n - 1] = oneThird * h;
-            _ypp[n - 1] = rightDerivative - (_y[n - 1] - _y[n - 2]) / h;
-        }
-
-        Detail::SolveTridiagonal<Real, Scalar>(
-            std::span<const Real>{sub}, std::span<Real>{diag},
-            std::span<const Real>{super}, std::span<Scalar>{_ypp});
+        Detail::ValidateSamples(x, y, notAKnot ? 4 : 2, "CubicSpline");
+        return x;
     }
 };
 

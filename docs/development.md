@@ -56,9 +56,11 @@ tree.
 
 ## Benchmarks
 
-The two algorithmic changes in phase 2 have a harness that measures them
-against the implementations they replaced, rather than resting on complexity
-arguments:
+The algorithmic changes made here have a harness that measures them against
+the implementations they replaced, rather than resting on complexity
+arguments. It covers barycentric `Lagrange`, the tridiagonal spline solve, and
+the shared-factorisation path for a nodal derivative over many lines on one
+grid:
 
 ```sh
 cmake -S . -B build -DINTERPOLATION_BUILD_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=Release
@@ -73,10 +75,16 @@ answers is visible rather than hidden.
 
 ## Continuous integration
 
-CI builds the gcc-14 and clang-18 matrix across Release and Debug with
+CI builds the gcc-13, gcc-14 and clang-18 matrix across Release and Debug with
 warnings as errors, runs an ASan and UBSan job, checks formatting with
 clang-format 18, builds the documentation, and installs the package to verify
 that a separate consumer project can find it through `find_package`.
+
+GCC 13 is in the matrix because it is the compiler on the deployment target
+for the codes the consuming libraries serve. Nothing needs fixing for it; the
+leg exists so that it stays that way by construction rather than by
+inspection. The one decision that would break it is deducing `this`, which
+GCC 13 lacks and which no header uses.
 
 Reproduce any of these locally with the matching preset before pushing.
 

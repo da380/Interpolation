@@ -1,6 +1,7 @@
 #ifndef INTERPOLATION_BICUBIC_SPLINE_HPP
 #define INTERPOLATION_BICUBIC_SPLINE_HPP
 
+#include <algorithm>
 #include <cstddef>
 #include <ranges>
 #include <span>
@@ -9,7 +10,7 @@
 #include <vector>
 
 #include <Interpolation/Concepts.hpp>
-#include <Interpolation/CubicSpline.hpp>
+#include <Interpolation/CubicSplineSystem.hpp>
 #include <Interpolation/Grid.hpp>
 #include <Interpolation/Samples.hpp>
 
@@ -159,7 +160,7 @@ class BicubicSpline {
         _mxy.assign(_rows * _columns, Scalar{});
 
         // Copy the axes into contiguous buffers once: a view is not
-        // guaranteed to be contiguous, and the solver takes spans.
+        // guaranteed to be contiguous, and the systems below borrow theirs.
         std::vector<Real> xNodes(_rows);
         std::vector<Real> yNodes(_columns);
         for (std::size_t i = 0; i < _rows; ++i) {
@@ -169,55 +170,48 @@ class BicubicSpline {
             yNodes[j] = _y[j];
         }
 
+        // Every row shares one system and every column shares another, so the
+        // two matrices are assembled and factorised once for the whole grid
+        // rather than once per line. That is the tensor product paying for
+        // itself: the first-axis system is used _columns times for the values
+        // and again for the mixed term, and the second-axis system _rows
+        // times.
+        const auto xSystem =
+            CubicSplineSystem{std::span<const Real>{xNodes}, edge};
+        const auto ySystem =
+            CubicSplineSystem{std::span<const Real>{yNodes}, edge};
+
+        // The right-hand side is read while the solution is written, so the
+        // two cannot share a buffer. Both are allocated once for the whole
+        // grid rather than once per line.
         const auto longest = std::max(_rows, _columns);
         std::vector<Scalar> line(longest);
         std::vector<Scalar> result(longest);
-        std::vector<Real> sub(longest), diag(longest), super(longest);
-        std::vector<Scalar> slope(longest);
-
-        // One line solve, with whichever edge condition was asked for. The
-        // scratch buffers are allocated once for the whole grid rather than
-        // once per line.
-        const auto solveLine = [&](std::span<const Real> nodes,
-                                   std::size_t count) {
-            if (edge == BoundaryCondition::NotAKnot) {
-                Detail::NotAKnotCurvatures<Real, Scalar>(
-                    nodes, std::span<const Scalar>{line.data(), count},
-                    std::span<Scalar>{result.data(), count},
-                    std::span<Real>{sub.data(), count},
-                    std::span<Real>{diag.data(), count},
-                    std::span<Real>{super.data(), count},
-                    std::span<Scalar>{slope.data(), count});
-            } else {
-                Detail::NaturalCurvatures<Real, Scalar>(
-                    nodes, std::span<const Scalar>{line.data(), count},
-                    std::span<Scalar>{result.data(), count},
-                    std::span<Real>{sub.data(), count},
-                    std::span<Real>{diag.data(), count},
-                    std::span<Real>{super.data(), count});
-            }
-        };
 
         const auto solveAlongX = [&](auto read, auto write) {
+            const auto in = std::span<const Scalar>{line.data(), _rows};
+            const auto out = std::span<Scalar>{result.data(), _rows};
             for (std::size_t j = 0; j < _columns; ++j) {
                 for (std::size_t i = 0; i < _rows; ++i) {
                     line[i] = read(i, j);
                 }
-                solveLine(std::span<const Real>{xNodes}, _rows);
+                xSystem.Solve(in, out);
                 for (std::size_t i = 0; i < _rows; ++i) {
-                    write(i, j, result[i]);
+                    write(i, j, out[i]);
                 }
             }
         };
 
         const auto solveAlongY = [&](auto read, auto write) {
+            const auto in = std::span<const Scalar>{line.data(), _columns};
+            const auto out = std::span<Scalar>{result.data(), _columns};
             for (std::size_t i = 0; i < _rows; ++i) {
                 for (std::size_t j = 0; j < _columns; ++j) {
                     line[j] = read(i, j);
                 }
-                solveLine(std::span<const Real>{yNodes}, _columns);
+                ySystem.Solve(in, out);
                 for (std::size_t j = 0; j < _columns; ++j) {
-                    write(i, j, result[j]);
+                    write(i, j, out[j]);
                 }
             }
         };

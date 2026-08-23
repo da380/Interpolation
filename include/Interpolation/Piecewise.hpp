@@ -11,16 +11,9 @@
 
 #include <Interpolation/Concepts.hpp>
 #include <Interpolation/Function.hpp>
+#include <Interpolation/Side.hpp>
 
 namespace Interpolation {
-
-/** @brief Which side of a breakpoint a query should be answered from. */
-enum class Side {
-    /** The piece ending at the breakpoint. */
-    Left,
-    /** The piece starting at the breakpoint. */
-    Right
-};
 
 /**
  * @brief A borrowed view of one piece, together with the interval it covers.

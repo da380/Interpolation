@@ -3,10 +3,13 @@
 
 #include <cstddef>
 #include <ranges>
+#include <span>
 #include <utility>
+#include <vector>
 
 #include <Interpolation/Concepts.hpp>
 #include <Interpolation/Samples.hpp>
+#include <Interpolation/Side.hpp>
 
 namespace Interpolation {
 
@@ -72,6 +75,48 @@ class Linear {
 
     /** @brief Evaluate the interpolant; the same as `Evaluate<0>`. */
     constexpr Scalar operator()(Real x) const { return Evaluate<0>(x); }
+
+    /**
+     * @brief Evaluate the interpolant, or its `N`th derivative, at every node.
+     *
+     * Writes one value per node into `out`, in node order, without a segment
+     * search: the segment adjoining each node is known. For a caller who wants
+     * the whole nodal sweep — a difference operator on a fixed grid, say —
+     * this replaces `Size()` binary searches with none.
+     *
+     * The first derivative jumps across an interior node, since the pieces are
+     * linear; `side` chooses which limit is reported, and defaults to the
+     * right-hand one, so that `EvaluateAtNodes<N>(out)` agrees with
+     * `Evaluate<N>(Node(k))` for every `k`.
+     *
+     * @tparam N Derivative order; `0` is the value itself.
+     * @param out Output, one per node. Overwritten.
+     * @param side Which adjoining segment to answer from at a node.
+     * @throws std::invalid_argument if `out` has the wrong length.
+     */
+    template <std::size_t N = 0>
+    void EvaluateAtNodes(std::span<Scalar> out, Side side = Side::Right) const {
+        const auto n = Size();
+        Detail::ValidateNodeOutput(out.size(), n, "Linear");
+        for (std::size_t k = 0; k < n; ++k) {
+            const auto i = Detail::NodeSegment(n, k, side);
+            out[k] = Detail::LinearPiece<N, Real, Scalar>(
+                _x[i + 1] - _x[i], _x[k] - _x[i], _y[i], _y[i + 1]);
+        }
+    }
+
+    /**
+     * @brief The nodal values or `N`th derivatives, in a fresh vector.
+     *
+     * The convenient form of EvaluateAtNodes. It allocates, so a caller
+     * sweeping many lines should keep one buffer and call EvaluateAtNodes.
+     */
+    template <std::size_t N = 0>
+    std::vector<Scalar> NodeValues(Side side = Side::Right) const {
+        std::vector<Scalar> values(Size());
+        EvaluateAtNodes<N>(std::span<Scalar>{values}, side);
+        return values;
+    }
 
     /** @brief Abscissa of node `i`. */
     constexpr Real Node(std::size_t i) const { return _x[i]; }

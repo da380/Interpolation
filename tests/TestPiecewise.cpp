@@ -320,3 +320,126 @@ TEST(CubicSpline, NotAKnotMustBeUsedAtBothEnds) {
                      Interpolation::BoundaryCondition::NotAKnot, 0.0}),
                  std::invalid_argument);
 }
+
+// --- The conventions a consumer depends on ----------------------------------
+//
+// GSHTrans has adopted this class's breakpoint semantics wholesale: its
+// RadialGrid carries an element partition represented as breakpoints in
+// exactly this sense, so that the two libraries cannot disagree about what
+// happens at a core-mantle boundary. The tests above exercise the class; these
+// state the contract, so that a change to it fails here and is noticed rather
+// than discovered downstream.
+
+namespace {
+
+using Contract =
+    Interpolation::Linear<std::ranges::ref_view<const std::vector<double>>,
+                          std::ranges::ref_view<const std::vector<double>>>;
+
+// Two pieces meeting at 1.0 with different values there: a genuine jump, of
+// the kind a material discontinuity produces.
+const std::vector<double> kLowerX{0.0, 1.0};
+const std::vector<double> kLowerY{0.0, 2.0};
+const std::vector<double> kUpperX{1.0, 2.0};
+const std::vector<double> kUpperY{10.0, 14.0};
+
+Interpolation::Piecewise<Contract>
+Discontinuous() {
+    std::vector<Contract> pieces{Contract{kLowerX, kLowerY},
+                                 Contract{kUpperX, kUpperY}};
+    return Interpolation::Piecewise<Contract>{{0.0, 1.0, 2.0},
+                                              std::move(pieces)};
+}
+
+} // namespace
+
+TEST(PiecewiseContract, ContinuityAcrossABreakpointIsNotChecked) {
+    // Construction must succeed: a jump is data, not an error. This is the
+    // clause a consumer relies on most, because enforcing continuity here
+    // would make a layered earth model unrepresentable.
+    const auto f = Discontinuous();
+
+    ASSERT_EQ(f.PieceCount(), 2u);
+    const auto [below, above] = f.Limits(1.0);
+    EXPECT_DOUBLE_EQ(below, 2.0);
+    EXPECT_DOUBLE_EQ(above, 10.0);
+    EXPECT_NE(below, above);
+}
+
+TEST(PiecewiseContract, ThePiecesTileTheDomainWithNoGaps) {
+    const auto f = Discontinuous();
+
+    EXPECT_DOUBLE_EQ(f.Lower(), f.Breakpoint(0));
+    EXPECT_DOUBLE_EQ(f.Upper(), f.Breakpoint(f.PieceCount()));
+
+    for (std::size_t k = 0; k < f.PieceCount(); ++k) {
+        SCOPED_TRACE("piece " + std::to_string(k));
+        const auto piece = f.Piece(k);
+        EXPECT_DOUBLE_EQ(piece.Lower(), f.Breakpoint(k));
+        EXPECT_DOUBLE_EQ(piece.Upper(), f.Breakpoint(k + 1));
+        // No gap: each piece begins exactly where the last one ended.
+        if (k > 0) {
+            EXPECT_DOUBLE_EQ(f.Piece(k - 1).Upper(), piece.Lower());
+        }
+    }
+}
+
+TEST(PiecewiseContract, PieceKOwnsTheHalfOpenIntervalFromTheLeft) {
+    const auto f = Discontinuous();
+
+    // Right-continuity: landing exactly on an interior breakpoint is answered
+    // by the piece starting there.
+    EXPECT_EQ(f.IndexOf(1.0), 1u);
+    EXPECT_EQ(f.IndexOf(1.0, Interpolation::Side::Right), 1u);
+    EXPECT_EQ(f.IndexOf(1.0, Interpolation::Side::Left), 0u);
+    EXPECT_DOUBLE_EQ(f(1.0), 10.0);
+
+    // The interior of a piece is unambiguous, whichever side is asked for.
+    for (const auto x : {0.25, 0.75, 1.25, 1.75}) {
+        SCOPED_TRACE("x = " + std::to_string(x));
+        EXPECT_EQ(f.IndexOf(x, Interpolation::Side::Left),
+                  f.IndexOf(x, Interpolation::Side::Right));
+        const auto [left, right] = f.Limits(x);
+        EXPECT_DOUBLE_EQ(left, right);
+    }
+
+    // The outer breakpoints have only one piece to answer from.
+    EXPECT_EQ(f.IndexOf(0.0, Interpolation::Side::Left), 0u);
+    EXPECT_EQ(f.IndexOf(2.0, Interpolation::Side::Right), 1u);
+}
+
+TEST(PiecewiseContract, LimitsReportsTheLeftValueFirst) {
+    const auto f = Discontinuous();
+
+    const auto limits = f.Limits(1.0);
+    EXPECT_DOUBLE_EQ(limits.first,
+                     f.EvaluateFrom<0>(1.0, Interpolation::Side::Left));
+    EXPECT_DOUBLE_EQ(limits.second,
+                     f.EvaluateFrom<0>(1.0, Interpolation::Side::Right));
+
+    // The ordering is load-bearing for a caller reading a jump off a
+    // boundary, so it is stated rather than left to be inferred.
+    EXPECT_LT(limits.first, limits.second);
+}
+
+TEST(PiecewiseContract, DerivativesFollowTheSameConvention) {
+    const auto f = Discontinuous();
+
+    // Slopes 2 below and 4 above, so the derivative jumps too. Evaluate is
+    // right-continuous at every order, not only at order zero.
+    const auto [belowSlope, aboveSlope] = f.Limits<1>(1.0);
+    EXPECT_DOUBLE_EQ(belowSlope, 2.0);
+    EXPECT_DOUBLE_EQ(aboveSlope, 4.0);
+    EXPECT_DOUBLE_EQ(f.Evaluate<1>(1.0), aboveSlope);
+}
+
+TEST(PiecewiseContract, OutsideTheDomainTheEndPieceContinues) {
+    const auto f = Discontinuous();
+
+    // Not clamped and not an error: the end piece is extrapolated, which is
+    // what a solver stepping slightly past the last breakpoint needs.
+    EXPECT_EQ(f.IndexOf(-1.0), 0u);
+    EXPECT_EQ(f.IndexOf(3.0), f.PieceCount() - 1);
+    EXPECT_DOUBLE_EQ(f(-1.0), -2.0);
+    EXPECT_DOUBLE_EQ(f(3.0), 18.0);
+}

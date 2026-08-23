@@ -15,6 +15,8 @@ noted below. The library has no external dependencies.
 | `Lagrange` | Global polynomial interpolation of sampled values | 1 node |
 | `LagrangeBasis` | Individual Lagrange cardinal basis functions | 1 node |
 | `Polynomial` | Polynomial evaluation, calculus, and arithmetic | Defaults to zero; otherwise 1 coefficient |
+| `CubicSplineSystem` | The spline system for a fixed grid, factorised once and reused across datasets | 2 nodes |
+| `TridiagonalFactorization` | A tridiagonal matrix reduced once, ready to act on many right-hand sides | 1 row |
 
 Two-dimensional interpolation on rectilinear grids:
 
@@ -37,7 +39,7 @@ strictly increasing, and this is enforced at construction.
 
 ## Requirements
 
-- A C++23 compiler. GCC 14 and Clang 18 are the versions CI covers
+- A C++23 compiler. GCC 13, GCC 14 and Clang 18 are the versions CI covers
 - CMake 3.24 or newer
 - No external dependencies. Git access is needed only when CMake fetches
   GoogleTest to build the tests
@@ -54,7 +56,9 @@ cmake --build --preset gcc-14
 ctest --preset gcc-14
 ```
 
-`clang-18`, `debug`, `asan` and `docs` presets are also available.
+`gcc-13`, `clang-18`, `debug`, `asan` and `docs` presets are also
+available. The `gcc-13` leg exists because that is the compiler on the
+deployment target for the codes the consuming libraries serve.
 
 ## Use from CMake
 
@@ -249,12 +253,61 @@ running one tells you immediately whether it did the right thing.
 | `08-derivatives-and-integrals` | `Primitive`, and integrals that are exact |
 | `09-piecewise-layers` | Discontinuities, extracting a layer, mixed kinds |
 | `10-two-dimensions` | Grids, mixed partials, why the edge condition matters |
+| `11-one-grid-many-datasets` | Factorising a grid once, and evaluating at every node |
 
 ```sh
 cmake --preset gcc-14
 cmake --build --preset gcc-14 --target examples
 ./build/gcc-14/examples/03-boundary-conditions
 ```
+
+## One grid, many datasets
+
+A cubic spline's matrix depends on the nodes alone; only the right-hand side
+carries the ordinates. So a caller holding many datasets on one grid — the
+components of a field, an ensemble of profiles, a line of spectral
+coefficients — should factorise once and solve many times rather than
+construct a spline per dataset. `CubicSplineSystem` names that, and
+`CubicSpline` is built on it, so there is one assembly of the spline equations
+rather than one per caller.
+
+```cpp
+#include <Interpolation/CubicSplineSystem.hpp>
+
+const auto system = Interpolation::CubicSplineSystem{
+    radius, Interpolation::BoundaryCondition::NotAKnot};   // factorised here
+
+std::vector<std::complex<double>> curvature(radius.size());
+std::vector<std::complex<double>> derivative(radius.size());
+
+for (const auto& line : lines) {
+    system.Solve(line, std::span{curvature});
+    system.EvaluateAtNodes<1>(line, curvature, std::span{derivative});
+}
+```
+
+`Solve` and `EvaluateAtNodes` both write into storage the caller owns and are
+`const`, so the loop allocates nothing and a fixed system may be shared across
+threads. The matrix is real even when the ordinates are complex, so the
+ordinate type is a parameter of `Solve` rather than of the class: one system
+serves both. A spline that has already been built hands its system back
+through `SplineSystem()`.
+
+The other half of the same idea is `EvaluateAtNodes`, which every
+one-dimensional interpolator offers: evaluating at the nodes is the one query
+that needs no search, since the segment adjoining each node is known.
+
+```cpp
+const Interpolation::CubicSpline spline{x, y};
+const auto slopes = spline.NodeValues<1>();               // allocating form
+spline.EvaluateAtNodes<1>(std::span{buffer});             // into your storage
+```
+
+A value at a node agrees from both sides, but a high enough derivative need
+not — the third for a cubic, the first for a piecewise-linear interpolant.
+Evaluation is right-continuous throughout the library, so the default reports
+the limit from the segment starting at the node, and `Side::Left` asks for the
+other. `Piecewise` uses the same convention across its breakpoints.
 
 ## Build, test, and document
 
@@ -298,3 +351,14 @@ directly by the Thomas algorithm. The system is strictly diagonally dominant,
 so no pivoting is required. Its coefficients are real even when the ordinates
 are complex, so a complex spline solves a real system against a complex
 right-hand side.
+
+Natural and Clamped are assembled in the nodal-curvature formulation and
+solved for what the evaluator wants. Not-a-knot is assembled in nodal slopes
+and converted afterwards: written directly in curvatures its boundary row
+reaches outside the tridiagonal band, and eliminating that entry leaves a
+leading coefficient of `h0^2 - h1^2`, which vanishes on a uniform grid. In
+slopes the diagonal of that row is `h1 > 0` for any spacing.
+
+Both the assembled system and the tridiagonal solver behind it are public:
+`CubicSplineSystem` for the spline case, `TridiagonalFactorization` and
+`SolveTridiagonal` for a caller with a banded system of their own.

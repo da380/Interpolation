@@ -22,6 +22,8 @@ add_executable(Tests
                TestFunctionAlgebra.cpp
                TestGrid2D.cpp
                TestPiecewise.cpp
+               TestSplineSystem.cpp
+               TestAtNodes.cpp
                AllocationCounter.cpp)
 
 target_link_libraries(Tests PRIVATE Interpolation::Interpolation gtest_main)

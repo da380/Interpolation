@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <numeric>
 #include <random>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -297,6 +298,68 @@ main() {
                 worst, RelativeDifference(dense[i], spline.Evaluate<2>(x[i])));
         }
         Row("CubicSpline construction", n, before, after, worst);
+    }
+
+    // One grid, many datasets: the shape a radial differentiation operator
+    // has. The replaced form is a spline per line and a binary search per
+    // node; the current one factorises the grid once and sweeps the nodes.
+    for (const std::size_t n : {9u, 33u, 129u}) {
+        constexpr std::size_t lineCount = 512;
+        const auto [x, unused] = MakeSamples(n, 20260823ull);
+        (void) unused;
+
+        std::vector<std::vector<double>> lines;
+        lines.reserve(lineCount);
+        for (std::size_t line = 0; line < lineCount; ++line) {
+            const auto [ignored, y] =
+                MakeSamples(n, 20260823ull + 7919ull * line);
+            (void) ignored;
+            lines.push_back(y);
+        }
+
+        const auto before = BestOf(repetitions, [&] {
+            double total = 0.0;
+            for (const auto &line : lines) {
+                const Interpolation::CubicSpline spline{x, line};
+                for (std::size_t i = 0; i < n; ++i) {
+                    total += spline.Evaluate<1>(x[i]);
+                }
+            }
+            g_sink = total;
+        });
+
+        const auto after = BestOf(repetitions, [&] {
+            // The factorisation is inside the timed region, so it is paid for
+            // exactly once and the comparison stays honest.
+            const Interpolation::CubicSplineSystem system{x};
+            std::vector<double> curvature(n), derivative(n);
+            double total = 0.0;
+            for (const auto &line : lines) {
+                system.Solve(line, std::span<double>{curvature});
+                system.EvaluateAtNodes<1>(line, curvature,
+                                          std::span<double>{derivative});
+                for (std::size_t i = 0; i < n; ++i) {
+                    total += derivative[i];
+                }
+            }
+            g_sink = total;
+        });
+
+        const Interpolation::CubicSplineSystem system{x};
+        std::vector<double> curvature(n), derivative(n);
+        double worst = 0.0;
+        for (const auto &line : lines) {
+            const Interpolation::CubicSpline spline{x, line};
+            system.Solve(line, std::span<double>{curvature});
+            system.EvaluateAtNodes<1>(line, curvature,
+                                      std::span<double>{derivative});
+            for (std::size_t i = 0; i < n; ++i) {
+                worst = std::max(worst,
+                                 RelativeDifference(derivative[i],
+                                                    spline.Evaluate<1>(x[i])));
+            }
+        }
+        Row("d/dx at nodes, 512 lines", n, before, after, worst);
     }
 
     std::printf(

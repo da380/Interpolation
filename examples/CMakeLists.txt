@@ -12,7 +12,8 @@ set(INTERPOLATION_EXAMPLES
     07-function-algebra
     08-derivatives-and-integrals
     09-piecewise-layers
-    10-two-dimensions)
+    10-two-dimensions
+    11-one-grid-many-datasets)
 
 foreach(example IN LISTS INTERPOLATION_EXAMPLES)
   add_executable(${example} ${example}.cpp)

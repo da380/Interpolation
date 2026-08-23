@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, refactor]
+    branches: [main, develop, refactor]
   pull_request:
   workflow_dispatch:
 
@@ -18,6 +18,12 @@ jobs:
   # The test suite is the behavioural oracle for the refactor. Warnings are
   # errors here, but only on our own targets: dependencies are fetched SYSTEM
   # so their headers are not held to our flags.
+  #
+  # GCC 13 is in the matrix because it is what the deployment target for the
+  # codes GSHTrans serves actually has. Nothing here needs fixing for it today;
+  # the leg exists so that it stays that way by construction. The one decision
+  # that would break it is deducing `this`, which GCC 13 lacks and which no
+  # header uses — a compiler is a better guard on that than an inspection.
   # ---------------------------------------------------------------------------
   build-and-test:
     name: ${{ matrix.compiler }} (${{ matrix.build_type }})
@@ -25,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [g++-14, clang++-18]
+        compiler: [g++-13, g++-14, clang++-18]
         build_type: [Release, Debug]
 
     steps:
@@ -34,11 +40,10 @@ jobs:
       - name: Install the compiler
         run: |
           sudo apt-get update
-          if [ "${{ matrix.compiler }}" = "g++-14" ]; then
-            sudo apt-get install -y g++-14
-          else
-            sudo apt-get install -y clang-18
-          fi
+          case "${{ matrix.compiler }}" in
+            clang++-18) sudo apt-get install -y clang-18 ;;
+            *)          sudo apt-get install -y "${{ matrix.compiler }}" ;;
+          esac
 
       - name: Cache FetchContent dependencies
         uses: actions/cache@v4
@@ -65,7 +70,7 @@ jobs:
       # counts agree.
       - name: Check the oracle is intact
         run: |
-          expected=92
+          expected=119
           count=$(ctest --test-dir build -N | sed -n 's/^Total Tests: //p')
           echo "Discovered $count tests, expected at least $expected."
           if [ "$count" -lt "$expected" ]; then
@@ -161,6 +166,7 @@ jobs:
           cat > consumer/main.cpp <<'CPP'
           #include <Interpolation/Interpolation.hpp>
           #include <cstdio>
+          #include <span>
           #include <utility>
           #include <vector>
 
@@ -175,6 +181,24 @@ jobs:
           int main() {
               const auto s = MakeSpline();
               std::printf("%.6f %.6f\n", s(1.5), s.Evaluate<1>(1.5));
+
+              // The shared-factorisation path, so that its headers are known
+              // to reach an install tree and not only the build tree.
+              const std::vector<double> x{0.0, 1.0, 2.0, 3.0};
+              const std::vector<double> y{0.0, 1.0, 4.0, 9.0};
+              const auto system = Interpolation::CubicSplineSystem{x};
+              std::vector<double> curvature(x.size()), slope(x.size());
+              system.Solve(y, std::span{curvature});
+              system.EvaluateAtNodes<1>(y, curvature, std::span{slope});
+
+              const Interpolation::CubicSpline reference{x, y};
+              for (std::size_t i = 0; i < x.size(); ++i) {
+                  if (slope[i] != reference.Evaluate<1>(x[i])) {
+                      std::printf("nodal sweep disagreed at node %zu\n", i);
+                      return 1;
+                  }
+              }
+              std::printf("nodal sweep agrees at every node\n");
               return 0;
           }
           CPP

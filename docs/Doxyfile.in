@@ -7,7 +7,11 @@ INPUT                  = "@CMAKE_CURRENT_SOURCE_DIR@/include" \
                          "@CMAKE_CURRENT_SOURCE_DIR@/docs"
 FILE_PATTERNS          = *.hpp *.md
 RECURSIVE              = YES
-EXCLUDE_PATTERNS       = */build/* */_deps/*
+# The hand-over notes exchanged with the consuming libraries are prose about a
+# relationship between repositories, not API reference, and they name members
+# in running text ("RadialInterpolation::CubicSpline()") that Doxygen reads as
+# explicit link requests it cannot resolve. They are read on GitHub, not here.
+EXCLUDE_PATTERNS       = */build/* */_deps/* */*-for-GSHTrans.md
 EXAMPLE_PATH           = "@CMAKE_CURRENT_SOURCE_DIR@/examples"
 USE_MDFILE_AS_MAINPAGE = "@CMAKE_CURRENT_SOURCE_DIR@/README.md"
 STRIP_FROM_PATH        = "@CMAKE_CURRENT_SOURCE_DIR@"

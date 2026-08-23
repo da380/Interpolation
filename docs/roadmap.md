@@ -241,6 +241,56 @@ order, about 770x better than natural at 65 by 65 on sin(x)cos(y).
 `AnyFunction1D` supplies the type erasure that gives `Piecewise` mixed piece
 kinds, and the examples are a numbered series in `examples/`.
 
+### Phase 5 - What a consumer found
+
+The first phase driven from outside rather than from this plan. GSHTrans
+adopted the library, used it in anger, and wrote up what it learned in
+`docs/Interpolation-for-GSHTrans.md`. Four asks came back, and all four are
+done.
+
+**The factorisation is now reachable.** The observation behind the ask is that
+a cubic spline's matrix depends on the nodes alone, so a caller with many
+ordinate sets on one grid can factorise once and solve many times — and
+GSHTrans, lacking any way to reach it, had grown its own copy of the spline
+system and a Thomas sweep to go with it. Two implementations of one spline in
+two repositories with one author is the cost worth avoiding, well ahead of the
+1.2x to 2x it measured.
+
+`CubicSplineSystem` is that matrix, and `TridiagonalFactorization` is the
+reduced form underneath it, both public. The elimination happens once at
+construction and keeps its pivots, which the previous one-shot solver
+destroyed; `Solve` is then a forward sweep and a back substitution with no
+division at all, allocating nothing and `const` so a fixed system is shareable
+across threads. `CubicSpline` is built on it, so the spline equations are
+assembled in one place rather than one per caller, and `BicubicSpline` now
+builds one system per axis instead of one per line.
+
+**Evaluating at the nodes no longer searches.** `EvaluateAtNodes<N>` and
+`NodeValues<N>` on every one-dimensional interpolator, and on
+`CubicSplineSystem` for a caller working from ordinates and curvatures
+directly. The sided cases — the third derivative of a cubic, the first of a
+piecewise-linear interpolant — take the `Side` that `Piecewise` already
+defined, moved to its own header so one convention covers breakpoints and
+nodes alike.
+
+**GCC 13 is in the CI matrix**, because it is what the deployment target for
+the codes GSHTrans serves actually has. Nothing needed fixing; the leg keeps
+it that way by construction.
+
+**`Piecewise`'s conventions are pinned by tests** rather than holding by
+construction. A consumer has built its own element partition to match them, so
+right-continuity, the ordering of `Limits`, gapless tiling, and the deliberate
+absence of a continuity check are now stated in a `PiecewiseContract` group
+that fails here if any of them moves.
+
+**Exit:** the suite goes 92 to 119 tests, green on GCC 13, GCC 14 and Clang
+18, with the new curvatures bit-for-bit identical to what the old code
+produced.
+
+Status: done. Measured on this machine at 512 lines per grid, the shared
+factorisation with a nodal sweep runs 2.8x to 5.0x the spline-per-line path
+and agrees with it to zero relative difference.
+
 ## Correctness items folded into the above
 
 - Compiling the headers with `-Wall -Wextra` surfaces two unused variables in

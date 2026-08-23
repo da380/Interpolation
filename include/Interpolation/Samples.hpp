@@ -2,15 +2,13 @@
 #define INTERPOLATION_SAMPLES_HPP
 
 #include <algorithm>
-#include <cassert>
 #include <cstddef>
 #include <ranges>
-#include <span>
 #include <stdexcept>
 #include <string>
 
 #include <Interpolation/Concepts.hpp>
-#include <Interpolation/Tridiagonal.hpp>
+#include <Interpolation/Side.hpp>
 
 namespace Interpolation::Detail {
 
@@ -102,6 +100,54 @@ LocateSegment(const XRange &x, Real query) {
 }
 
 /**
+ * @brief Check that a nodal output range is the right length.
+ *
+ * Shared by the `EvaluateAtNodes` of every interpolator, so the message is
+ * written once and reads the same wherever it comes from.
+ *
+ * @param given Length the caller supplied.
+ * @param expected Number of nodes.
+ * @param what Interpolator name, used in the exception message.
+ * @throws std::invalid_argument if the lengths differ.
+ */
+inline void
+ValidateNodeOutput(std::size_t given, std::size_t expected, const char *what) {
+    if (given != expected) {
+        throw std::invalid_argument(
+            std::string{what} +
+            "::EvaluateAtNodes: the output range has length " +
+            std::to_string(given) + " but there are " +
+            std::to_string(expected) + " nodes");
+    }
+}
+
+/**
+ * @brief Index of the segment that owns node `k`, from a chosen side.
+ *
+ * The counterpart of LocateSegment for a query that is known to land exactly
+ * on a node, so there is nothing to search for. `Side::Right` reproduces
+ * LocateSegment exactly, including its treatment of the final node, which has
+ * no segment to its right and so is answered from the one to its left;
+ * `Side::Left` mirrors it at the first node.
+ *
+ * The distinction matters only for a derivative order the interpolant does not
+ * carry across a knot — the third for a cubic, the first for a linear
+ * interpolant. Below that order the two sides agree to rounding.
+ *
+ * @param n Number of nodes, at least two.
+ * @param k Node index.
+ * @param side Which adjoining segment to use.
+ * @return Segment index in `[0, n - 1)`.
+ */
+constexpr std::size_t
+NodeSegment(std::size_t n, std::size_t k, Side side) {
+    if (side == Side::Right) {
+        return k + 1 < n ? k : n - 2;
+    }
+    return k > 0 ? k - 1 : 0;
+}
+
+/**
  * @brief Value or `N`th derivative of a linear piece.
  *
  * The piece spans `[0, h]` with end values `f0` and `f1`, evaluated at offset
@@ -152,159 +198,6 @@ SplinePiece(Real h, Real t, Scalar f0, Scalar f1, Scalar m0, Scalar m1) {
                        oneSixth;
         }
     }
-}
-
-/**
- * @brief Natural-spline second derivatives at the nodes.
- *
- * Solves the same tridiagonal system CubicSpline builds, with the natural
- * condition at both ends, for a sequence of values sampled on `nodes`. It is
- * factored out here because the tensor-product grid has to solve it once per
- * row and once per column, and the caller supplies the scratch diagonals so
- * that a whole grid costs one set of buffers rather than one per line.
- *
- * @param nodes Strictly increasing abscissae.
- * @param values Sampled values, the same length as `nodes`.
- * @param curvature Output, the same length as `nodes`.
- * @param sub Scratch, the same length as `nodes`.
- * @param diag Scratch, the same length as `nodes`.
- * @param super Scratch, the same length as `nodes`.
- */
-template <typename Real, typename Scalar>
-void
-NaturalCurvatures(std::span<const Real> nodes, std::span<const Scalar> values,
-                  std::span<Scalar> curvature, std::span<Real> sub,
-                  std::span<Real> diag, std::span<Real> super) {
-    const auto n = nodes.size();
-    assert(n >= 2);
-
-    constexpr auto oneThird = static_cast<Real>(1) / static_cast<Real>(3);
-    constexpr auto oneSixth = static_cast<Real>(1) / static_cast<Real>(6);
-
-    std::ranges::fill(sub, Real{});
-    std::ranges::fill(diag, Real{});
-    std::ranges::fill(super, Real{});
-    std::ranges::fill(curvature, Scalar{});
-
-    for (std::size_t i = 1; i + 1 < n; ++i) {
-        const auto hPrev = nodes[i] - nodes[i - 1];
-        const auto hNext = nodes[i + 1] - nodes[i];
-        sub[i] = oneSixth * hPrev;
-        diag[i] = oneThird * (hPrev + hNext);
-        super[i] = oneSixth * hNext;
-        curvature[i] = (values[i + 1] - values[i]) / hNext -
-                       (values[i] - values[i - 1]) / hPrev;
-    }
-
-    // The natural condition states directly that the end curvature is zero.
-    diag[0] = 1;
-    diag[n - 1] = 1;
-
-    SolveTridiagonal<Real, Scalar>(std::span<const Real>{sub}, diag,
-                                   std::span<const Real>{super}, curvature);
-}
-
-/**
- * @brief Not-a-knot second derivatives at the nodes.
- *
- * The not-a-knot condition makes the third derivative continuous across the
- * first and last interior knots, so the first two polynomial pieces are one
- * cubic and the last two are another. Unlike the natural condition it does
- * not impose anything false at the boundary, so the scheme stays fourth
- * order there and a cubic is reproduced exactly.
- *
- * It is solved in the nodal-slope formulation rather than the nodal-curvature
- * one. Written directly in curvatures the boundary row reaches outside the
- * tridiagonal band, and eliminating that entry produces a leading coefficient
- * of `h0^2 - h1^2`, which vanishes on a uniform grid. In slopes the same
- * condition gives the boundary row
- *
- * @f[
- * h_1 d_0 + (h_0 + h_1) d_1 =
- *   \frac{h_1 (2h_1 + 3h_0)\delta_0 + h_0^2 \delta_1}{h_0 + h_1},
- * @f]
- *
- * whose diagonal is @f$h_1 > 0@f$ for any spacing. The slopes are then
- * converted to curvatures so that evaluation uses the same segment formula as
- * every other spline here.
- *
- * No pivoting is used. The interior rows are diagonally dominant by a factor
- * of two; the two boundary rows are not, but the first elimination step turns
- * the second pivot into @f$h_0 + h_1@f$, and the pivots stay positive.
- *
- * @param nodes Strictly increasing abscissae, at least four of them.
- * @param values Sampled values, the same length as `nodes`.
- * @param curvature Output, the same length as `nodes`.
- * @param sub Scratch, the same length as `nodes`.
- * @param diag Scratch, the same length as `nodes`.
- * @param super Scratch, the same length as `nodes`.
- * @param slope Scratch, the same length as `nodes`.
- */
-template <typename Real, typename Scalar>
-void
-NotAKnotCurvatures(std::span<const Real> nodes, std::span<const Scalar> values,
-                   std::span<Scalar> curvature, std::span<Real> sub,
-                   std::span<Real> diag, std::span<Real> super,
-                   std::span<Scalar> slope) {
-    const auto n = nodes.size();
-    assert(n >= 4);
-
-    const auto h = [&](std::size_t i) { return nodes[i + 1] - nodes[i]; };
-    const auto secant = [&](std::size_t i) {
-        return (values[i + 1] - values[i]) / h(i);
-    };
-
-    std::ranges::fill(sub, Real{});
-    std::ranges::fill(diag, Real{});
-    std::ranges::fill(super, Real{});
-    std::ranges::fill(slope, Scalar{});
-
-    // Interior rows: continuity of the second derivative, in slope form.
-    for (std::size_t i = 1; i + 1 < n; ++i) {
-        sub[i] = h(i);
-        diag[i] = 2 * (h(i - 1) + h(i));
-        super[i] = h(i - 1);
-        slope[i] = static_cast<Real>(3) *
-                   (h(i) * secant(i - 1) + h(i - 1) * secant(i));
-    }
-
-    // Left not-a-knot row.
-    {
-        const auto h0 = h(0);
-        const auto h1 = h(1);
-        diag[0] = h1;
-        super[0] = h0 + h1;
-        slope[0] = (h1 * (2 * h1 + 3 * h0) * secant(0) + h0 * h0 * secant(1)) /
-                   (h0 + h1);
-    }
-
-    // Right not-a-knot row, the mirror of the left.
-    {
-        const auto hLast = h(n - 2);
-        const auto hPrev = h(n - 3);
-        sub[n - 1] = hLast + hPrev;
-        diag[n - 1] = hPrev;
-        slope[n - 1] = (hPrev * (2 * hPrev + 3 * hLast) * secant(n - 2) +
-                        hLast * hLast * secant(n - 3)) /
-                       (hPrev + hLast);
-    }
-
-    SolveTridiagonal<Real, Scalar>(std::span<const Real>{sub}, diag,
-                                   std::span<const Real>{super}, slope);
-
-    // Convert nodal slopes to nodal curvatures: on segment i the piece is
-    // y_i + d_i t + c t^2 + e t^3, so S''(x_i) = 2c.
-    for (std::size_t i = 0; i + 1 < n; ++i) {
-        curvature[i] = static_cast<Real>(2) *
-                       (static_cast<Real>(3) * secant(i) -
-                        static_cast<Real>(2) * slope[i] - slope[i + 1]) /
-                       h(i);
-    }
-    const auto hEnd = h(n - 2);
-    curvature[n - 1] = (static_cast<Real>(2) * slope[n - 2] +
-                        static_cast<Real>(4) * slope[n - 1] -
-                        static_cast<Real>(6) * secant(n - 2)) /
-                       hEnd;
 }
 
 } // namespace Interpolation::Detail

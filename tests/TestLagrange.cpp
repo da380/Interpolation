@@ -1,10 +1,109 @@
 #include <gtest/gtest.h>
 
 #include <Interpolation/Lagrange.hpp>
+#include <cmath>
 #include <complex>
+#include <limits>
+#include <numbers>
 #include <vector>
 
 #include "TestUtilities.h"
+
+namespace {
+
+// Two unequal node sets away from zero: the five Gauss-Lobatto-Legendre
+// nodes of [0.35, 0.5], the spectral element in which the derivative beside
+// a node was found wrong, and seven Chebyshev nodes of [1, 3].
+std::vector<std::vector<double>>
+UnequalNodeSets() {
+    const auto a = 0.35;
+    const auto b = 0.5;
+    const auto s = std::sqrt(3.0 / 7.0);
+    std::vector<std::vector<double>> sets{{a, a + (b - a) * (1.0 - s) / 2.0,
+                                           (a + b) / 2.0,
+                                           a + (b - a) * (1.0 + s) / 2.0, b},
+                                          {}};
+    const auto n = 7;
+    for (int j = 0; j < n; ++j) {
+        sets[1].push_back(2.0 -
+                          std::cos((2 * j + 1) * std::numbers::pi / (2.0 * n)));
+    }
+    return sets;
+}
+
+// Queries 1, 2, 4, 64 and 1e4 ulps either side of every node.
+std::vector<double>
+QueriesBesideNodes(const std::vector<double> &nodes) {
+    std::vector<double> queries;
+    for (const auto node : nodes) {
+        for (const auto toward : {-std::numeric_limits<double>::infinity(),
+                                  std::numeric_limits<double>::infinity()}) {
+            const auto ulp = std::nextafter(node, toward) - node;
+            for (const double ulps : {1.0, 2.0, 4.0, 64.0, 1e4}) {
+                queries.push_back(node + ulps * ulp);
+            }
+        }
+    }
+    return queries;
+}
+
+struct ProductForm {
+    long double slope;
+    long double scale;
+};
+
+// L_i'(t) from the product form, which never divides by t - x_j, in long
+// double. The scale is the sum of the sizes of its terms, which is |L_i'(t)|
+// unless they cancel, as at the turning point of a symmetric basis function.
+ProductForm
+CardinalSlope(const std::vector<double> &nodes, std::size_t i, long double t) {
+    auto denominator = 1.0L;
+    for (std::size_t m = 0; m < nodes.size(); ++m) {
+        if (m != i) {
+            denominator *= static_cast<long double>(nodes[i]) - nodes[m];
+        }
+    }
+    auto slope = 0.0L;
+    auto scale = 0.0L;
+    for (std::size_t j = 0; j < nodes.size(); ++j) {
+        if (j == i) {
+            continue;
+        }
+        auto product = 1.0L;
+        for (std::size_t m = 0; m < nodes.size(); ++m) {
+            if (m != i && m != j) {
+                product *= t - nodes[m];
+            }
+        }
+        slope += product;
+        scale += std::abs(product);
+    }
+    return {slope / denominator, scale / std::abs(denominator)};
+}
+
+template <typename Scalar>
+void
+ExpectSlopeAccurateBesideNodes(const std::vector<double> &x,
+                               const std::vector<Scalar> &y) {
+    const Interpolation::Lagrange interpolant{x, y};
+    for (const auto query : QueriesBesideNodes(x)) {
+        SCOPED_TRACE(query);
+        // The sum of y_i L_i' is unchanged by a shift of the ordinates, and
+        // shifting by y_0 makes the reference sum cancel less.
+        std::complex<long double> expected{};
+        for (std::size_t i = 0; i < x.size(); ++i) {
+            const auto difference =
+                std::complex<double>(y[i]) - std::complex<double>(y[0]);
+            expected += std::complex<long double>(difference) *
+                        CardinalSlope(x, i, query).slope;
+        }
+        const auto actual = std::complex<long double>(
+            std::complex<double>(interpolant.template Evaluate<1>(query)));
+        EXPECT_LE(std::abs(actual - expected), 1e-13L * std::abs(expected));
+    }
+}
+
+} // namespace
 
 TEST(LagrangeBasis, CardinalValuesPartitionAndDerivatives) {
     const std::vector<double> nodes{-1.0, 0.5, 2.0};
@@ -106,5 +205,39 @@ TEST(Lagrange, ComplexPolynomialAndDerivativeAreRecovered) {
                                             polynomial(query));
         InterpolationTest::ExpectScaledNear(
             interpolant.template Evaluate<1>(query), derivative(query));
+    }
+}
+
+// Beside a node, the barycentric derivative divides L_i(x) - 1 by the small
+// x - x_i, so it once kept only the rounding of L_i(x): 1e-2 relative error one
+// ulp from a node.
+TEST(LagrangeBasis, DerivativeIsAccurateBesideANode) {
+    for (const auto &nodes : UnequalNodeSets()) {
+        const Interpolation::LagrangeBasis basis{nodes};
+        for (const auto query : QueriesBesideNodes(nodes)) {
+            for (std::size_t i = 0; i < nodes.size(); ++i) {
+                SCOPED_TRACE(query);
+                SCOPED_TRACE(i);
+                const auto expected = CardinalSlope(nodes, i, query);
+                const long double actual = basis.template Evaluate<1>(i, query);
+                EXPECT_LE(std::abs(actual - expected.slope),
+                          1e-13L * expected.scale);
+            }
+        }
+    }
+}
+
+// The same difference quotient, p(x) - y_k over x - x_k, goes wrong for every
+// set of ordinates: 4e-1 relative error one ulp from a node.
+TEST(Lagrange, DerivativeIsAccurateBesideANode) {
+    for (const auto &x : UnequalNodeSets()) {
+        std::vector<double> real;
+        std::vector<std::complex<double>> complex;
+        for (const auto value : x) {
+            real.push_back(std::exp(value));
+            complex.push_back(std::exp(std::complex<double>{1.0, 2.0} * value));
+        }
+        ExpectSlopeAccurateBesideNodes(x, real);
+        ExpectSlopeAccurateBesideNodes(x, complex);
     }
 }

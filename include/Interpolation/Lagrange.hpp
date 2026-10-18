@@ -1,6 +1,7 @@
 #ifndef INTERPOLATION_LAGRANGE_HPP
 #define INTERPOLATION_LAGRANGE_HPP
 
+#include <cmath>
 #include <cstddef>
 #include <ranges>
 #include <stdexcept>
@@ -115,14 +116,18 @@ class LagrangeBasis {
         }
         const auto value = (_w[i] / (x - _x[i])) / denominator;
 
-        // L_i'(x) = sum_j w_j (L_i(x) - delta_ij) / (x - x_j)^2 / D(x)
+        // L_i'(x) = L_i(x) sum_{j!=i} 1/(x - x_j), the identity the diagonal
+        // node branch uses. The barycentric derivative
+        // sum_j w_j (L_i(x) - delta_ij) / (x - x_j)^2 / D(x) is the same
+        // polynomial, but beside x_i its diagonal term divides L_i(x) - 1,
+        // which keeps only the rounding of L_i(x), by the small x - x_i.
         auto sum = static_cast<Real>(0);
         for (std::size_t j = 0; j < n; ++j) {
-            const auto gap = x - _x[j];
-            const auto target = (j == i) ? value - static_cast<Real>(1) : value;
-            sum += _w[j] * target / (gap * gap);
+            if (j != i) {
+                sum += static_cast<Real>(1) / (x - _x[j]);
+            }
         }
-        return sum / denominator;
+        return value * sum;
     }
 
     XView _x;
@@ -222,10 +227,10 @@ class Lagrange {
         // denominator for every one of them, which is quadratic and throws
         // away the whole point of the barycentric form.
         const auto n = Size();
-        const auto k = NodeIndex(x);
 
         if constexpr (N == 1) {
-            if (k != NoNode()) {
+            const auto k = NearestNode(x);
+            if (x == _basis.Node(k)) {
                 // p'(x_k) = sum_{j!=k} (w_j/w_k)(y_j - y_k)/(x_k - x_j)
                 const auto wk = _basis.Weight(k);
                 auto slope = Scalar{};
@@ -238,23 +243,31 @@ class Lagrange {
                 return slope;
             }
 
+            // p'(x) = sum_j w_j (p(x) - y_j) / (x - x_j)^2 / D(x). Beside x_k
+            // the k term divides p(x) - y_k by the small x - x_k, and formed
+            // as a difference p(x) - y_k keeps only the rounding of p(x). The
+            // second barycentric formula is unchanged by a shift of the
+            // ordinates, so it gives the offset from y_k directly, from the
+            // other cardinal functions, which are small there and accurate.
+            const auto yk = _y[k];
             auto denominator = Real{};
             auto numerator = Scalar{};
             for (std::size_t j = 0; j < n; ++j) {
                 const auto term = _basis.Weight(j) / (x - _basis.Node(j));
                 denominator += term;
-                numerator += term * _y[j];
+                numerator += term * (_y[j] - yk);
             }
-            const auto value = numerator / denominator;
+            const auto offset = numerator / denominator; // p(x) - y_k
 
-            // p'(x) = sum_j w_j (p(x) - y_j) / (x - x_j)^2 / D(x)
             auto slope = Scalar{};
             for (std::size_t j = 0; j < n; ++j) {
                 const auto gap = x - _basis.Node(j);
-                slope += _basis.Weight(j) * (value - _y[j]) / (gap * gap);
+                slope += _basis.Weight(j) * (offset - (_y[j] - yk)) /
+                         (gap * gap);
             }
             return slope / denominator;
         } else {
+            const auto k = NodeIndex(x);
             if (k != NoNode()) {
                 return _y[k];
             }
@@ -285,6 +298,19 @@ class Lagrange {
             }
         }
         return NoNode();
+    }
+
+    // A query on a node is nearest that node, so this also finds the node
+    // branch's index.
+    std::size_t NearestNode(Real x) const {
+        auto nearest = std::size_t{0};
+        for (std::size_t j = 1; j < Size(); ++j) {
+            if (std::abs(x - _basis.Node(j)) <
+                std::abs(x - _basis.Node(nearest))) {
+                nearest = j;
+            }
+        }
+        return nearest;
     }
 
     YView _y;

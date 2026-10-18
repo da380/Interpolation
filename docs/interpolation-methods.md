@@ -182,6 +182,21 @@ A query that lands exactly on a node makes the quotient `0/0`, so those cases
 are handled separately: the value is the sampled ordinate, and the derivative
 uses the standard node formulas.
 
+Beside a node, without landing on it, the barycentric derivative divides a
+difference of nearly equal numbers, \f$\ell_i(x)-1\f$ or \f$p(x)-y_k\f$, by
+the small distance to the node, and its error grows as the unit roundoff over
+that distance. Neither class differentiates that way. `LagrangeBasis` uses the
+logarithmic derivative
+
+\f[
+\ell_i'(x)=\ell_i(x)\sum_{j\ne i}\frac{1}{x-x_j},
+\f]
+
+and `Lagrange` evaluates the barycentric formula with every ordinate shifted
+by that of the nearest node, which leaves the polynomial unchanged and gives
+\f$p(x)-y_k\f$ without the subtraction. Both cost \f$O(n)\f$ and keep their
+accuracy right up to the node.
+
 With `n` nodes, the result exactly represents polynomials of degree at most
 `n-1`, apart from floating-point rounding. Evaluation is global: every sample
 contributes to every query, including extrapolation.

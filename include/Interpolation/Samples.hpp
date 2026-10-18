@@ -2,6 +2,7 @@
 #define INTERPOLATION_SAMPLES_HPP
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <ranges>
 #include <stdexcept>
@@ -97,6 +98,39 @@ LocateSegment(const XRange &x, Real query) {
     return static_cast<std::size_t>(
                std::ranges::distance(std::ranges::begin(x), upper)) -
            1;
+}
+
+/**
+ * @brief A query moved by whole periods, and how many were removed.
+ *
+ * Returned as a pair because an antiderivative needs both: the value of a
+ * periodic function needs only the reduced query, but its integral gains the
+ * integral over one period for each period removed.
+ */
+template <typename Real> struct PeriodReduction {
+    /** Whole periods removed; negative for a query below the period. */
+    Real turns;
+    /** The query moved into the period. */
+    Real reduced;
+};
+
+/**
+ * @brief Move a query by whole periods into `[start, start + period)`.
+ *
+ * A query already inside comes back unchanged, bit for bit, so reduction
+ * costs nothing in accuracy where it was not needed. One that lands within
+ * rounding of either end may come back just outside it, which the segment
+ * search absorbs by continuing the edge piece over a distance of rounding.
+ *
+ * @param x Query abscissa.
+ * @param start First node.
+ * @param period Width of one period, positive.
+ */
+template <typename Real>
+PeriodReduction<Real>
+ReduceToPeriod(Real x, Real start, Real period) {
+    const auto turns = std::floor((x - start) / period);
+    return {turns, turns == Real{} ? x : x - turns * period};
 }
 
 /**

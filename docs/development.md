@@ -73,6 +73,17 @@ are noise. It reports the best of several repetitions and the largest relative
 difference between the two implementations, so a speedup that changed the
 answers is visible rather than hidden.
 
+## Toolchain constraints
+
+Measured on the development machine rather than assumed, because they shape
+the design. The library is C++23 but uses neither `std::expected` nor
+`std::mdspan`. Clang 18 cannot see `std::expected` even against libstdc++ 14,
+so preconditions throw `std::invalid_argument` instead. `<mdspan>` needs
+GCC 15 or libc++ 18, which neither toolchain here has, so the N-D seam is the
+small in-house `Extents` and `Grid2DView`, written so that `mdspan` can replace
+them later without changing the public API. Deducing `this` is avoided because
+GCC 13 lacks it.
+
 ## Continuous integration
 
 CI builds the gcc-13, gcc-14 and clang-18 matrix across Release and Debug with
@@ -88,5 +99,5 @@ GCC 13 lacks and which no header uses.
 
 Reproduce any of these locally with the matching preset before pushing.
 
-Finish each phase with `git diff --check` and review `git status --short` to
+Finish each change with `git diff --check` and review `git status --short` to
 ensure generated files and unrelated repositories have not changed.

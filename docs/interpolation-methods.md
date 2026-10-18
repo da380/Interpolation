@@ -36,6 +36,11 @@ second derivatives `M_i = S''(x_i)`.
   and converted back to curvatures: written directly in curvatures its
   boundary row leaves the tridiagonal band, and eliminating that entry
   produces a leading coefficient that vanishes on a uniform grid.
+- `BoundaryCondition::Periodic` joins the final node to the first, with the
+  value and first two derivatives continuous across the seam. The final node
+  closes the period, and its ordinate must equal the first exactly. Like
+  not-a-knot it applies at both ends and needs at least four nodes, counting
+  the closing one; it has its own section below.
 
 The three-argument constructor is Free/Free, commonly called a natural spline.
 Mixed Free/Clamped combinations are supported. The implementation assembles the
@@ -80,10 +85,51 @@ defaults to the right-hand one, so the nodal sweep agrees with an ordinary
 query at the same abscissa. This is the same convention `Piecewise` uses across
 its breakpoints, and it is deliberately the only one in the library.
 
+### The periodic condition
+
+Data on a circle has no ends, so any end condition invents something. The
+periodic spline instead treats every node as interior, with indices taken
+modulo the \f$m\f$ distinct nodes, \f$h_{-1} = h_{m-1}\f$ and
+\f$\delta_{-1} = \delta_{m-1}\f$:
+
+\f[
+\frac{h_{i-1}}{6} M_{i-1} + \frac{h_{i-1} + h_i}{3} M_i + \frac{h_i}{6} M_{i+1}
+  = \delta_i - \delta_{i-1}, \qquad i = 0, \ldots, m - 1.
+\f]
+
+That system is cyclic: tridiagonal but for one entry in each far corner. It is
+solved by Sherman-Morrison. Folding the corners into the first and last
+diagonal entries leaves a tridiagonal matrix that is still strictly diagonally
+dominant; it is factorised once, the one auxiliary solution the rank-one
+correction needs is kept with it, and each solve is then one sweep and one
+correction, `const` and free of allocation as before. The correction divides
+by the ratio of the two matrices' determinants, which is positive since both
+are positive definite, so it never fails.
+
+The caller passes the closing node, one period after the first, with a copy
+of the first ordinate. That is how a periodic grid is usually held already,
+and it is how scipy reads periodic data too. A closing ordinate that differs
+by rounding is refused rather than quietly overwritten, since it is a sign the
+value was computed separately.
+
+Queries are reduced into \f$[x_0, x_n)\f$, so the spline repeats. Everything
+else that answers a query follows: `Segment` reports the segment of the
+reduced query; the nodal sweep wraps at the seam, so that the right-hand limit
+at the closing node and the left-hand limit at the first are taken from the
+pieces on the far side; and `Primitive` adds the integral over one period for
+each period crossed, since the antiderivative of a function with nonzero mean
+grows rather than repeating.
+
+On equal and on stretched grids, through samples of \f$\sin\f$ and
+\f$\cos\f$, the periodic spline converges at fourth order: measured rates
+4.00 to 4.10.
+
+### Exterior evaluation
+
 Use a cubic spline for smooth material profiles or other data where continuous
 first and second derivatives matter. Exterior evaluation continues the first
-or final cubic piece and should not be interpreted as a physically constrained
-extrapolation model.
+or final cubic piece, except under the periodic condition, and should not be
+interpreted as a physically constrained extrapolation model.
 
 ## Akima interpolation
 
@@ -220,9 +266,9 @@ That last one is what makes it a true tensor product rather than two
 independent one-dimensional fits. Evaluation then needs only the sixteen
 corner quantities of the containing cell and allocates nothing.
 
-The edge condition applies on all four edges and defaults to not-a-knot, which
-keeps the scheme fourth order there. The natural condition is also available
-and needs only three nodes per axis, but it fixes the second derivative to zero
+The short form takes one condition for all four edges and defaults to
+not-a-knot, which keeps the scheme fourth order there. The natural condition is
+also available and needs only two nodes per axis, but it fixes the second derivative to zero
 at the edges, which the data rarely satisfies, and the resulting
 \f$O(h^2)\f$ boundary error drags global convergence down to second order.
 Measured on \f$\sin x \cos y\f$, worst error over the whole square:
@@ -235,3 +281,42 @@ Measured on \f$\sin x \cos y\f$, worst error over the whole square:
 | 65 x 65 | \f$4.2\times10^{-5}\f$ | \f$5.4\times10^{-8}\f$ |
 
 Not-a-knot converges at fourth order globally; natural does not.
+
+### Conditions per axis
+
+Each axis can instead take its own pair of conditions, through
+`AxisConditions`, with the slopes for any clamped edge in `EdgeSlopes`: for a
+clamped edge of the first axis, \f$\partial_x S\f$ there at every node of the
+second, and the reverse. The assembly keeps its shape, with the end data each
+solve now needs:
+
+- \f$M^x\f$, along the first axis, each line with its own two end slopes;
+- \f$M^y\f$, along the second axis, under that axis's conditions;
+- \f$M^{xy}\f$, along the first axis applied to \f$M^y\f$. On a clamped edge
+  its end data is \f$\partial_x \partial_y^2 S\f$ there, which is the
+  second-axis curvature of that edge's slopes, found by applying the
+  second-axis system to the slope array.
+
+That last step is what keeps the result the tensor product of the two
+conditions. Along a clamped edge, the derivative across it is the spline of the
+given slopes under the other axis's conditions, between the nodes as well as
+at them, and the whole surface agrees to rounding with the spline of splines:
+a one-dimensional spline along every line of the first axis, read at the
+query, then one through those readings along the second.
+
+One axis may be clamped, not both. Clamping both would need the
+cross-derivative \f$\partial_x \partial_y S\f$ at the four corners as well,
+which there is no natural way to supply, so the combination is refused rather
+than given invented corner data.
+
+A periodic axis follows the one-dimensional convention. Its final node closes
+the period; the values along it, and the slopes on any clamped edge running
+along it, must close exactly; and queries along it are reduced. The closure is
+checked before any solve, so a fault is reported against `BicubicSpline`
+rather than surfacing from a line solve inside the assembly; every array the
+assembly derives from the data then closes by construction. One periodic
+condition on all four edges gives a spline on the torus.
+
+Clamped across the poles of \f$[0, \pi] \times [0, 2\pi)\f$ with exact slopes,
+and periodic in the second variable, the scheme converges at fourth order:
+measured rates 3.96 to 4.19.

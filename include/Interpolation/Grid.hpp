@@ -109,7 +109,8 @@ namespace Detail {
  * @param x First-axis abscissae.
  * @param y Second-axis abscissae.
  * @param values Flat, row-major values with `size(x) * size(y)` elements.
- * @param minimumNodes Fewest nodes each axis needs.
+ * @param minimumX Fewest nodes the first axis needs.
+ * @param minimumY Fewest nodes the second axis needs.
  * @param what Interpolator name, used in the exception message.
  * @throws std::invalid_argument if an axis is too short or not strictly
  *         increasing, or the value count does not match the axes.
@@ -117,9 +118,9 @@ namespace Detail {
 template <typename XRange, typename YRange, typename VRange>
 void
 ValidateGrid(const XRange &x, const YRange &y, const VRange &values,
-             std::size_t minimumNodes, const char *what) {
-    ValidateSamples(x, x, minimumNodes, what);
-    ValidateSamples(y, y, minimumNodes, what);
+             std::size_t minimumX, std::size_t minimumY, const char *what) {
+    ValidateSamples(x, x, minimumX, what);
+    ValidateSamples(y, y, minimumY, what);
 
     const auto nx = static_cast<std::size_t>(std::ranges::size(x));
     const auto ny = static_cast<std::size_t>(std::ranges::size(y));
@@ -131,6 +132,14 @@ ValidateGrid(const XRange &x, const YRange &y, const VRange &values,
             std::to_string(ny) + " = " + std::to_string(nx * ny) +
             " values, but was given " + std::to_string(nv));
     }
+}
+
+/** @brief ValidateGrid with the same minimum on both axes. */
+template <typename XRange, typename YRange, typename VRange>
+void
+ValidateGrid(const XRange &x, const YRange &y, const VRange &values,
+             std::size_t minimumNodes, const char *what) {
+    ValidateGrid(x, y, values, minimumNodes, minimumNodes, what);
 }
 
 } // namespace Detail

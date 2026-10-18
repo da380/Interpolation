@@ -19,14 +19,14 @@ UnequalNodeSets() {
     const auto a = 0.35;
     const auto b = 0.5;
     const auto s = std::sqrt(3.0 / 7.0);
-    std::vector<std::vector<double>> sets{
-        {a, a + (b - a) * (1.0 - s) / 2.0, (a + b) / 2.0,
-         a + (b - a) * (1.0 + s) / 2.0, b},
-        {}};
+    std::vector<std::vector<double>> sets{{a, a + (b - a) * (1.0 - s) / 2.0,
+                                           (a + b) / 2.0,
+                                           a + (b - a) * (1.0 + s) / 2.0, b},
+                                          {}};
     const auto n = 7;
     for (int j = 0; j < n; ++j) {
-        sets[1].push_back(2.0 - std::cos((2 * j + 1) * std::numbers::pi /
-                                         (2.0 * n)));
+        sets[1].push_back(2.0 -
+                          std::cos((2 * j + 1) * std::numbers::pi / (2.0 * n)));
     }
     return sets;
 }
@@ -97,8 +97,8 @@ ExpectSlopeAccurateBesideNodes(const std::vector<double> &x,
             expected += std::complex<long double>(difference) *
                         CardinalSlope(x, i, query).slope;
         }
-        const auto actual = std::complex<long double>(std::complex<double>(
-            interpolant.template Evaluate<1>(query)));
+        const auto actual = std::complex<long double>(
+            std::complex<double>(interpolant.template Evaluate<1>(query)));
         EXPECT_LE(std::abs(actual - expected), 1e-13L * std::abs(expected));
     }
 }
@@ -219,8 +219,7 @@ TEST(LagrangeBasis, DerivativeIsAccurateBesideANode) {
                 SCOPED_TRACE(query);
                 SCOPED_TRACE(i);
                 const auto expected = CardinalSlope(nodes, i, query);
-                const long double actual =
-                    basis.template Evaluate<1>(i, query);
+                const long double actual = basis.template Evaluate<1>(i, query);
                 EXPECT_LE(std::abs(actual - expected.slope),
                           1e-13L * expected.scale);
             }

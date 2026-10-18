@@ -262,8 +262,8 @@ class Lagrange {
             auto slope = Scalar{};
             for (std::size_t j = 0; j < n; ++j) {
                 const auto gap = x - _basis.Node(j);
-                slope += _basis.Weight(j) * (offset - (_y[j] - yk)) /
-                         (gap * gap);
+                slope +=
+                    _basis.Weight(j) * (offset - (_y[j] - yk)) / (gap * gap);
             }
             return slope / denominator;
         } else {

@@ -12,7 +12,7 @@ Each public forwarding header exposes one facility:
 | `<Interpolation/Lagrange.hpp>` | `Lagrange`, `LagrangeBasis` |
 | `<Interpolation/Polynomial.hpp>` | `Polynomial` |
 | `<Interpolation/Bilinear.hpp>` | `Bilinear` |
-| `<Interpolation/BicubicSpline.hpp>` | `BicubicSpline` |
+| `<Interpolation/BicubicSpline.hpp>` | `BicubicSpline`, `AxisConditions`, `EdgeSlopes` |
 | `<Interpolation/Piecewise.hpp>` | `Piecewise`, `PieceView`, `Side`, `SplitAtRepeats` |
 | `<Interpolation/Grid.hpp>` | `Extents`, `Extents2D`, `Grid2DView` |
 | `<Interpolation/Function.hpp>` | `Function1D`, the operators, `Derivative`, `Compose`, `Primitive` |
@@ -107,3 +107,21 @@ The three-argument `CubicSpline` constructor selects Free conditions at both
 ends. A six-argument overload applies one condition type to both endpoints,
 while the full seven-argument overload selects each endpoint independently.
 Derivative values passed for Free endpoints are ignored.
+
+## Coming from the iterator-based API
+
+Earlier versions took iterators and spelled several names differently. Code
+written against them migrates by this table; construction changes from three
+iterators to two ranges, as described above.
+
+| Was | Becomes | Why |
+| --- | --- | --- |
+| `Polynomial1D` | `Polynomial` | Dimension lives in the namespace, not the name |
+| `Akima` | `AkimaSpline` | Class name matched neither its header nor its siblings |
+| `LagrangePolynomial` | `LagrangeBasis` | It is the cardinal basis, not a polynomial |
+| `CubicSplineBC::Free` | `BoundaryCondition::Natural` | The docs already glossed Free as "natural" |
+| `x_value_type`, `value_t` | `Real` | One vocabulary across the library |
+| `y_value_type` | `Scalar` | Real or complex ordinate |
+| `.Derivative(x)` | `.Evaluate<1>(x)` | `Derivative(f)` is now a free function on functions |
+| `<Interpolation/All>` | `<Interpolation/Interpolation.hpp>` | Extensionless headers confuse tooling |
+| `.deriv()`, `.Primative()` | removed | Already deprecated forwarding aliases |

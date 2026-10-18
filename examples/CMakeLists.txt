@@ -13,7 +13,8 @@ set(INTERPOLATION_EXAMPLES
     08-derivatives-and-integrals
     09-piecewise-layers
     10-two-dimensions
-    11-one-grid-many-datasets)
+    11-one-grid-many-datasets
+    12-periodic-and-clamped)
 
 foreach(example IN LISTS INTERPOLATION_EXAMPLES)
   add_executable(${example} ${example}.cpp)

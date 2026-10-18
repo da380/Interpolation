@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <Interpolation/Concepts.hpp>
+#include <Interpolation/Samples.hpp>
 
 namespace Interpolation {
 
@@ -207,6 +208,13 @@ template <Function1D F> class FunctionRef {
         }
     {
         return _f->SegmentIntegral(i, t);
+    }
+
+    /** @brief Period, when the borrowed function reports one. */
+    constexpr auto Period() const
+        requires requires(const F &f) { f.Period(); }
+    {
+        return _f->Period();
     }
 
     /** @brief Closed-form antiderivative, when the borrowed function has one.
@@ -670,6 +678,12 @@ class Composition {
  *
  * Its own derivatives are just the operand's, shifted down by one, so a
  * primitive composes like anything else in the algebra.
+ *
+ * An operand that reports a period through `Period()` is integrated across
+ * it: each whole period between the first node and the query adds the
+ * integral over one period, so the primitive of a periodic spline grows
+ * steadily rather than repeating, and still differentiates back to the
+ * spline everywhere.
  */
 template <PiecewisePolynomial1D F> class PiecewisePrimitive {
   public:
@@ -696,8 +710,14 @@ template <PiecewisePolynomial1D F> class PiecewisePrimitive {
      */
     template <std::size_t N = 0> Scalar Evaluate(Real x) const {
         if constexpr (N == 0) {
-            const auto i = _f.Segment(x);
-            return _cumulative[i] + _f.SegmentIntegral(i, x - _f.Node(i));
+            if constexpr (requires(const F &f) { f.Period(); }) {
+                if (const auto period = _f.Period()) {
+                    const auto [turns, reduced] =
+                        Detail::ReduceToPeriod(x, _f.Node(0), *period);
+                    return turns * _cumulative.back() + Accumulated(reduced);
+                }
+            }
+            return Accumulated(x);
         } else {
             return _f.template Evaluate<N - 1>(x);
         }
@@ -714,6 +734,12 @@ template <PiecewisePolynomial1D F> class PiecewisePrimitive {
   private:
     F _f;
     std::vector<Scalar> _cumulative;
+
+    // The integral from the first node to `x` through the pieces themselves.
+    Scalar Accumulated(Real x) const {
+        const auto i = _f.Segment(x);
+        return _cumulative[i] + _f.SegmentIntegral(i, x - _f.Node(i));
+    }
 };
 
 /**

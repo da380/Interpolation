@@ -21,7 +21,7 @@ include(CMakePackageConfigHelpers)
 #
 # NumericConcepts is the library's only dependency: header-only, and used for
 # the Real / Complex / RealOrComplex vocabulary that the public concepts refine.
-# It publishes no release tags, so the pin is a commit.
+# The pin is its first tagged release.
 #
 # The package registry is excluded so that this never resolves from an
 # unrelated sibling project's build tree, which would make local builds depend
@@ -36,16 +36,9 @@ if(NOT NumericConcepts_FOUND)
   FetchContent_Declare(
     NumericConcepts
     GIT_REPOSITORY https://github.com/da380/NumericConcepts.git
-    GIT_TAG 888126b44a979fda5dcc9d0b11d80cb8b3f61b52
+    GIT_TAG v0.1.0
     SYSTEM)
   FetchContent_MakeAvailable(NumericConcepts)
-
-  # NumericConcepts creates the target "NumericConcepts" but no namespaced
-  # alias, so the usual spelling only exists once the package is installed and
-  # exported. Add it here so the link line is the same either way.
-  if(NOT TARGET NumericConcepts::NumericConcepts)
-    add_library(NumericConcepts::NumericConcepts ALIAS NumericConcepts)
-  endif()
 endif()
 
 # ---------------------------------------------------------------------------

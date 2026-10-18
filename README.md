@@ -10,12 +10,12 @@ noted below. The library has no external dependencies.
 | Routine | Purpose | Minimum data |
 | --- | --- | --- |
 | `Linear` | Piecewise-linear interpolation and derivative | 2 nodes |
-| `CubicSpline` | Smooth piecewise-cubic interpolation | 2 nodes |
+| `CubicSpline` | Smooth piecewise-cubic interpolation | 2 nodes; 4 for not-a-knot or periodic |
 | `AkimaSpline` | Local piecewise-cubic interpolation for real or complex ordinates | 3 nodes |
 | `Lagrange` | Global polynomial interpolation of sampled values | 1 node |
 | `LagrangeBasis` | Individual Lagrange cardinal basis functions | 1 node |
 | `Polynomial` | Polynomial evaluation, calculus, and arithmetic | Defaults to zero; otherwise 1 coefficient |
-| `CubicSplineSystem` | The spline system for a fixed grid, factorised once and reused across datasets | 2 nodes |
+| `CubicSplineSystem` | The spline system for a fixed grid, factorised once and reused across datasets | 2 nodes; 4 for not-a-knot or periodic |
 | `TridiagonalFactorization` | A tridiagonal matrix reduced once, ready to act on many right-hand sides | 1 row |
 
 Two-dimensional interpolation on rectilinear grids:
@@ -23,7 +23,7 @@ Two-dimensional interpolation on rectilinear grids:
 | Routine | Purpose | Minimum data |
 | --- | --- | --- |
 | `Bilinear` | Tensor-product linear interpolation on a grid | 2 nodes per axis |
-| `BicubicSpline` | Tensor-product cubic-spline interpolation on a grid | 2 nodes per axis |
+| `BicubicSpline` | Tensor-product cubic-spline interpolation on a grid | 4 nodes per axis by default; 2 for natural or clamped |
 
 Every one of the one-dimensional routines models the `Function1D` concept, which is what lets them be
 combined arithmetically, differentiated, composed and integrated as functions
@@ -229,11 +229,32 @@ segment formula the one-dimensional spline uses, and allocates nothing.
 
 The edge condition defaults to `BoundaryCondition::NotAKnot`, which keeps the
 scheme fourth order at the boundary; it needs at least four nodes on each
-axis. `BoundaryCondition::Natural` is also available and works with three,
+axis. `BoundaryCondition::Natural` is also available and works with two,
 but it forces a curvature the data usually does not have, which costs an
 order near the edges and leaves the global error converging at second order.
 On `sin(x)cos(y)` over a 65 by 65 grid the difference is about 770x in worst
 global error.
+
+Each axis can also take its own conditions. A field over colatitude and
+longitude, say, is clamped at the poles with a different slope on every
+meridian and periodic in longitude:
+
+```cpp
+using Interpolation::AxisConditions;
+using Interpolation::BoundaryCondition;
+
+Interpolation::BicubicSpline s{
+    theta, phi, values,
+    AxisConditions{BoundaryCondition::Clamped, BoundaryCondition::Clamped},
+    AxisConditions{BoundaryCondition::Periodic, BoundaryCondition::Periodic},
+    Interpolation::EdgeSlopes<double>{.xLow = north, .xHigh = south}};
+```
+
+`EdgeSlopes` holds, for each clamped edge, the derivative across it at every
+node along it; between the nodes it is the spline of those slopes. One axis
+may be clamped, not both, since that would also need the cross-derivative at
+the four corners. `BoundaryCondition::Periodic` on its own, on all four edges,
+gives a spline that is periodic in both variables.
 
 ## Examples
 
@@ -254,6 +275,7 @@ running one tells you immediately whether it did the right thing.
 | `09-piecewise-layers` | Discontinuities, extracting a layer, mixed kinds |
 | `10-two-dimensions` | Grids, mixed partials, why the edge condition matters |
 | `11-one-grid-many-datasets` | Factorising a grid once, and evaluating at every node |
+| `12-periodic-and-clamped` | Data with no ends, and per-axis conditions on a grid |
 
 ```sh
 cmake --preset gcc-14
@@ -333,7 +355,6 @@ Git.
 - [Getting started](docs/getting-started.md)
 - [Interpolation methods](docs/interpolation-methods.md)
 - [Development and validation](docs/development.md)
-- [Rebuilding roadmap](docs/roadmap.md)
 
 ## Cubic-spline boundary conditions
 
@@ -346,6 +367,14 @@ where Natural costs an order. It needs no extra information and at least four
 nodes, and it constrains the whole system, so it must be used at both ends or
 neither.
 
+`BoundaryCondition::Periodic` joins the final node to the first with the value
+and two derivatives continuous across the seam. The final node closes the
+period, so its ordinate must equal the first's exactly: a copy, not a
+recomputed value. Queries are reduced into one period, and `Primitive`
+carries on across periods by whole-period integrals. Like not-a-knot it
+constrains the whole system and needs at least four nodes, counting the
+closing one.
+
 The nodal second derivatives satisfy a tridiagonal system, which is solved
 directly by the Thomas algorithm. The system is strictly diagonally dominant,
 so no pivoting is required. Its coefficients are real even when the ordinates
@@ -357,7 +386,11 @@ solved for what the evaluator wants. Not-a-knot is assembled in nodal slopes
 and converted afterwards: written directly in curvatures its boundary row
 reaches outside the tridiagonal band, and eliminating that entry leaves a
 leading coefficient of `h0^2 - h1^2`, which vanishes on a uniform grid. In
-slopes the diagonal of that row is `h1 > 0` for any spacing.
+slopes the diagonal of that row is `h1 > 0` for any spacing. Periodic is
+cyclic, tridiagonal but for one entry in each far corner, and is solved by
+Sherman-Morrison on a tridiagonal factorisation: the auxiliary solution the
+correction needs is kept with it, so a solve is still one sweep and a rank-one
+update, and still allocates nothing.
 
 Both the assembled system and the tridiagonal solver behind it are public:
 `CubicSplineSystem` for the spline case, `TridiagonalFactorization` and

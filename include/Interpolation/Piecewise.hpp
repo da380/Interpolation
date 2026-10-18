@@ -107,6 +107,13 @@ template <Function1D F> class PieceView {
         return _f->SegmentIntegral(i, t);
     }
 
+    /** @brief Period, when the borrowed function reports one. */
+    constexpr auto Period() const
+        requires requires(const F &f) { f.Period(); }
+    {
+        return _f->Period();
+    }
+
     /** @brief Closed-form antiderivative, when the borrowed function has one.
      */
     constexpr Scalar Antiderivative(Real x) const

@@ -2,6 +2,7 @@
 #define INTERPOLATION_CUBIC_SPLINE_SYSTEM_HPP
 
 #include <cstddef>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -31,8 +32,79 @@ enum class BoundaryCondition {
      * costs an order. It is a condition on the whole system rather than on one
      * endpoint, so it must be used at both ends and needs at least four nodes.
      */
-    NotAKnot
+    NotAKnot,
+    /**
+     * @brief The spline and its first two derivatives are continuous across
+     * the seam where the final node meets the first.
+     *
+     * The final node closes the period: it lies one period beyond the first,
+     * and its ordinate must equal the first's exactly, so the grid a caller
+     * already holds needs no special case. Queries are reduced into
+     * `[x_0, x_n)`. Like NotAKnot it constrains the whole system, so it must
+     * be used at both ends, and it needs at least four nodes counting the
+     * closing one.
+     */
+    Periodic
 };
+
+namespace Detail {
+
+/**
+ * @brief Check that two endpoint conditions may be paired, and return the
+ * fewest nodes they need.
+ *
+ * Shared by every class that takes a pair, so the rule and its message are
+ * written once.
+ *
+ * @param left Condition at the first node.
+ * @param right Condition at the final node.
+ * @param what Class name, used in the exception message.
+ * @throws std::invalid_argument if NotAKnot or Periodic is used at only one
+ *         end.
+ */
+inline std::size_t
+SplineConditionMinimum(BoundaryCondition left, BoundaryCondition right,
+                       const char *what) {
+    const auto wholeSystem = [&](BoundaryCondition condition,
+                                 const char *name) {
+        if ((left == condition) != (right == condition)) {
+            throw std::invalid_argument(
+                std::string{what} + ": " + name +
+                " constrains the whole system rather than one endpoint, so "
+                "it must be used at both ends or neither");
+        }
+    };
+    wholeSystem(BoundaryCondition::NotAKnot, "NotAKnot");
+    wholeSystem(BoundaryCondition::Periodic, "Periodic");
+
+    return left == BoundaryCondition::NotAKnot ||
+                   left == BoundaryCondition::Periodic
+               ? 4
+               : 2;
+}
+
+/**
+ * @brief Check that the final ordinate of a periodic set equals the first.
+ *
+ * Exact equality is asked for, not closeness: the closing ordinate is meant
+ * to be a copy, and one that differs by rounding is a sign it was computed
+ * separately, which is worth hearing about.
+ *
+ * @throws std::invalid_argument if the two differ.
+ */
+template <typename YRange>
+void
+CheckPeriodicClosure(const YRange &y, const char *what) {
+    const auto n = static_cast<std::size_t>(std::ranges::size(y));
+    if (y[n - 1] != y[0]) {
+        throw std::invalid_argument(
+            std::string{what} +
+            ": a periodic spline's final ordinate closes the period, so it "
+            "must equal the first exactly");
+    }
+}
+
+} // namespace Detail
 
 /**
  * @brief The cubic-spline linear system for a fixed set of nodes, factorised
@@ -86,6 +158,25 @@ enum class BoundaryCondition {
  * step turns the second pivot into @f$h_0 + h_1@f$, and the pivots stay
  * positive.
  *
+ * Periodic is assembled in curvatures with every row interior, indices taken
+ * modulo the @f$m = n - 1@f$ distinct nodes. That system is cyclic: it is
+ * tridiagonal but for one entry in each far corner, both
+ * @f$c = h_{m-1}/6@f$. It is solved by Sherman-Morrison. With
+ * @f$\gamma = -A_{00}@f$, folding the corners into the first and last
+ * diagonal entries,
+ *
+ * @f[
+ * T = A - u v^T, \quad u = (\gamma, 0, \ldots, 0, c)^T, \quad
+ * v = (1, 0, \ldots, 0, c/\gamma)^T,
+ * @f]
+ *
+ * leaves a tridiagonal @f$T@f$ that is still strictly diagonally dominant.
+ * It is factorised once, and the one auxiliary solution
+ * @f$z = T^{-1} u@f$ is kept with it, so each Solve is a single tridiagonal
+ * solve and a rank-one correction, still `const` and still free of
+ * allocation. The correction divides by @f$1 + v^T z = \det A / \det T@f$,
+ * which is positive since both matrices are.
+ *
  * Construction takes a range of nodes, borrowing an lvalue and owning an
  * rvalue, exactly as the interpolators do.
  *
@@ -101,17 +192,23 @@ class CubicSplineSystem {
     /**
      * @brief Assemble and factorise the system.
      * @param x Strictly increasing abscissae; at least two, or four when
-     *        NotAKnot is used.
+     *        NotAKnot or Periodic is used. For Periodic the final node closes
+     *        the period.
      * @param left Condition at the first node.
      * @param right Condition at the final node.
      * @throws std::invalid_argument if the abscissae are not strictly
-     *         increasing, there are too few of them, or NotAKnot is asked for
-     *         at only one end.
+     *         increasing, there are too few of them, or NotAKnot or Periodic
+     *         is asked for at only one end.
      */
     CubicSplineSystem(XView x, BoundaryCondition left, BoundaryCondition right)
         : _x{std::move(x)}, _left{left}, _right{right},
           _notAKnot{left == BoundaryCondition::NotAKnot},
-          _factorization{Assemble(_x, left, right, _spacing)} {}
+          _periodic{left == BoundaryCondition::Periodic},
+          _factorization{Assemble(_x, left, right, _spacing)} {
+        if (_periodic) {
+            PrepareCorrection();
+        }
+    }
 
     /** @brief Assemble with the natural condition at both ends. */
     explicit CubicSplineSystem(XView x)
@@ -141,6 +238,17 @@ class CubicSplineSystem {
 
     /** @brief Condition imposed at the final node. */
     BoundaryCondition RightCondition() const { return _right; }
+
+    /**
+     * @brief The period, `x_n - x_0`, when the condition is Periodic; empty
+     * otherwise.
+     */
+    std::optional<Real> Period() const {
+        if (!_periodic) {
+            return std::nullopt;
+        }
+        return _x[Size() - 1] - _x[0];
+    }
 
     /**
      * @brief Solve for the nodal second derivatives of one ordinate set.
@@ -179,7 +287,8 @@ class CubicSplineSystem {
      * @param leftDerivative First derivative at the first node.
      * @param rightDerivative First derivative at the final node.
      * @param curvature Output, one per node. Overwritten.
-     * @throws std::invalid_argument if either length is wrong.
+     * @throws std::invalid_argument if either length is wrong, or the system
+     *         is Periodic and the final ordinate differs from the first.
      */
     template <typename YRange, typename Scalar>
         requires InterpolationRanges<XView, YRange>
@@ -192,6 +301,9 @@ class CubicSplineSystem {
 
         if (_notAKnot) {
             SolveNotAKnot(y, curvature);
+        } else if (_periodic) {
+            Detail::CheckPeriodicClosure(y, "CubicSplineSystem::Solve");
+            SolvePeriodic(y, curvature);
         } else {
             SolveCurvatureForm(y, leftDerivative, rightDerivative, curvature);
         }
@@ -201,10 +313,21 @@ class CubicSplineSystem {
      * @brief Index of the segment that owns node `k`, from a chosen side.
      *
      * `Side::Right` agrees with the segment an ordinary query at that node
-     * would select.
+     * would select. On a Periodic system the seam is not an end, so the
+     * closing node is answered from the first segment on its right, and the
+     * first node from the last segment on its left.
      */
     std::size_t NodeSegment(std::size_t k, Side side = Side::Right) const {
-        return Detail::NodeSegment(Size(), k, side);
+        const auto n = Size();
+        if (_periodic) {
+            if (side == Side::Right && k + 1 == n) {
+                return 0;
+            }
+            if (side == Side::Left && k == 0) {
+                return n - 2;
+            }
+        }
+        return Detail::NodeSegment(n, k, side);
     }
 
     /**
@@ -244,10 +367,16 @@ class CubicSplineSystem {
         CheckLength(out.size(), n, "output range");
 
         for (std::size_t k = 0; k < n; ++k) {
-            const auto i = Detail::NodeSegment(n, k, side);
+            const auto i = NodeSegment(k, side);
+            // Node k is the left end of its segment, or the right end. The
+            // one case where neither index says which is the closing node of
+            // a periodic system, answered from the start of the first
+            // segment.
+            const auto atLeftEnd =
+                i == k || (_periodic && k + 1 == n && i == 0);
             out[k] = Detail::SplinePiece<N, Real, Scalar>(
-                _spacing[i], _x[k] - _x[i], y[i], y[i + 1], curvature[i],
-                curvature[i + 1]);
+                _spacing[i], atLeftEnd ? Real{} : _spacing[i], y[i], y[i + 1],
+                curvature[i], curvature[i + 1]);
         }
     }
 
@@ -271,8 +400,15 @@ class CubicSplineSystem {
     BoundaryCondition _left;
     BoundaryCondition _right;
     bool _notAKnot;
+    bool _periodic;
     std::vector<Real> _spacing; // Segment widths; filled by Assemble.
     TridiagonalFactorization<Real> _factorization;
+
+    // The Sherman-Morrison correction a Periodic system needs; empty and
+    // unread otherwise.
+    std::vector<Real> _correction; // z = T^{-1} u
+    Real _cornerRatio{};           // c / gamma, the last entry of v
+    Real _inverseDenominator{};    // 1 / (1 + v^T z)
 
     static void CheckLength(std::size_t given, std::size_t expected,
                             const char *what) {
@@ -291,14 +427,10 @@ class CubicSplineSystem {
                                                    BoundaryCondition left,
                                                    BoundaryCondition right,
                                                    std::vector<Real> &spacing) {
-        const auto notAKnot = left == BoundaryCondition::NotAKnot;
-        if (notAKnot != (right == BoundaryCondition::NotAKnot)) {
-            throw std::invalid_argument(
-                "CubicSplineSystem: NotAKnot constrains the whole system "
-                "rather than one endpoint, so it must be used at both ends or "
-                "neither");
-        }
-        Detail::ValidateSamples(x, x, notAKnot ? 4 : 2, "CubicSplineSystem");
+        Detail::ValidateSamples(
+            x, x,
+            Detail::SplineConditionMinimum(left, right, "CubicSplineSystem"),
+            "CubicSplineSystem");
 
         const auto n = static_cast<std::size_t>(std::ranges::size(x));
         spacing.resize(n - 1);
@@ -306,9 +438,15 @@ class CubicSplineSystem {
             spacing[i] = x[i + 1] - x[i];
         }
 
-        std::vector<Real> sub(n, Real{}), diag(n, Real{}), super(n, Real{});
-        if (notAKnot) {
+        // A periodic system has one unknown fewer than there are nodes: the
+        // closing node's curvature is the first's.
+        const auto order = left == BoundaryCondition::Periodic ? n - 1 : n;
+        std::vector<Real> sub(order, Real{}), diag(order, Real{}),
+            super(order, Real{});
+        if (left == BoundaryCondition::NotAKnot) {
             AssembleNotAKnot(spacing, sub, diag, super);
+        } else if (left == BoundaryCondition::Periodic) {
+            AssemblePeriodic(spacing, sub, diag, super);
         } else {
             AssembleCurvatureForm(spacing, left, right, sub, diag, super);
         }
@@ -371,6 +509,52 @@ class CubicSplineSystem {
         diag[n - 1] = h[n - 3];
     }
 
+    // Every row is interior, with indices taken modulo the m distinct nodes.
+    // The two corner entries are left out here and folded into the first and
+    // last diagonal entries, which leaves the tridiagonal T that is
+    // factorised; PrepareCorrection supplies the rank-one remainder.
+    static void AssemblePeriodic(const std::vector<Real> &h,
+                                 std::vector<Real> &sub,
+                                 std::vector<Real> &diag,
+                                 std::vector<Real> &super) {
+        const auto m = diag.size();
+        constexpr auto oneThird = static_cast<Real>(1) / static_cast<Real>(3);
+        constexpr auto oneSixth = static_cast<Real>(1) / static_cast<Real>(6);
+
+        for (std::size_t i = 0; i < m; ++i) {
+            const auto previous = h[i == 0 ? m - 1 : i - 1];
+            sub[i] = oneSixth * previous;
+            diag[i] = oneThird * (previous + h[i]);
+            super[i] = oneSixth * h[i];
+        }
+
+        const auto corner = oneSixth * h[m - 1];
+        const auto gamma = -diag[0];
+        diag[0] -= gamma;
+        diag[m - 1] -= corner * corner / gamma;
+    }
+
+    // Solve T z = u once, for u = (gamma, 0, ..., 0, c), and keep what every
+    // later correction needs. Run from the constructor body, once the
+    // factorisation it uses exists.
+    void PrepareCorrection() {
+        const auto m = Size() - 1;
+        constexpr auto oneThird = static_cast<Real>(1) / static_cast<Real>(3);
+        constexpr auto oneSixth = static_cast<Real>(1) / static_cast<Real>(6);
+        const auto corner = oneSixth * _spacing[m - 1];
+        const auto gamma = -oneThird * (_spacing[m - 1] + _spacing[0]);
+
+        _correction.assign(m, Real{});
+        _correction[0] = gamma;
+        _correction[m - 1] = corner;
+        _factorization.Solve(std::span<Real>{_correction});
+
+        _cornerRatio = corner / gamma;
+        _inverseDenominator =
+            static_cast<Real>(1) / (static_cast<Real>(1) + _correction[0] +
+                                    _cornerRatio * _correction[m - 1]);
+    }
+
     template <typename YRange, typename Scalar>
     void SolveCurvatureForm(const YRange &y, Scalar leftDerivative,
                             Scalar rightDerivative,
@@ -392,6 +576,30 @@ class CubicSplineSystem {
                 : rightDerivative - (y[n - 1] - y[n - 2]) / h[n - 2];
 
         _factorization.Solve(curvature);
+    }
+
+    template <typename YRange, typename Scalar>
+    void SolvePeriodic(const YRange &y, std::span<Scalar> curvature) const {
+        const auto m = Size() - 1;
+        const auto &h = _spacing;
+        const auto secant = [&](std::size_t i) {
+            return (y[i + 1] - y[i]) / h[i];
+        };
+
+        curvature[0] = secant(0) - secant(m - 1);
+        for (std::size_t i = 1; i < m; ++i) {
+            curvature[i] = secant(i) - secant(i - 1);
+        }
+
+        const auto unknowns = curvature.first(m);
+        _factorization.Solve(unknowns);
+
+        const auto factor = (unknowns[0] + _cornerRatio * unknowns[m - 1]) *
+                            _inverseDenominator;
+        for (std::size_t i = 0; i < m; ++i) {
+            unknowns[i] -= factor * _correction[i];
+        }
+        curvature[m] = curvature[0];
     }
 
     template <typename YRange, typename Scalar>

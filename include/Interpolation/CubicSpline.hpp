@@ -2,6 +2,7 @@
 #define INTERPOLATION_CUBIC_SPLINE_HPP
 
 #include <cstddef>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -19,7 +20,9 @@ namespace Interpolation {
  * @brief Piecewise-cubic spline interpolation on ordered sample points.
  *
  * Construction takes ranges, borrowing lvalues and owning rvalues. Queries
- * outside the sample interval continue the first or final cubic piece.
+ * outside the sample interval continue the first or final cubic piece, except
+ * under the Periodic condition, where they are moved by whole periods into
+ * `[x_0, x_n)`.
  *
  * The linear system is assembled and factorised by CubicSplineSystem, which
  * this class holds and exposes through System(). A caller fitting many
@@ -44,14 +47,19 @@ class CubicSpline {
 
     /**
      * @brief Construct a spline with independently chosen endpoint conditions.
-     * @param x Strictly increasing abscissae, at least two.
-     * @param y Ordinates, the same length as `x`.
+     * @param x Strictly increasing abscissae, at least two, or four for
+     *        NotAKnot or Periodic. For Periodic the final node closes the
+     *        period.
+     * @param y Ordinates, the same length as `x`. For Periodic the final one
+     *        must equal the first.
      * @param left Condition at the first node.
      * @param leftDerivative First derivative there when `left` is Clamped.
      * @param right Condition at the final node.
      * @param rightDerivative First derivative there when `right` is Clamped.
      * @throws std::invalid_argument if the ranges differ in length, are too
-     *         short, or the abscissae are not strictly increasing.
+     *         short, the abscissae are not strictly increasing, NotAKnot or
+     *         Periodic is used at one end only, or a periodic set does not
+     *         close.
      */
     CubicSpline(XView x, YView y, BoundaryCondition left, Scalar leftDerivative,
                 BoundaryCondition right, Scalar rightDerivative)
@@ -90,10 +98,11 @@ class CubicSpline {
      * @param x Query abscissa.
      */
     template <std::size_t N = 0> Scalar Evaluate(Real x) const {
-        const auto i = Detail::LocateSegment(_system.Nodes(), x);
+        const auto reduced = Reduce(x);
+        const auto i = Detail::LocateSegment(_system.Nodes(), reduced);
         return Detail::SplinePiece<N, Real, Scalar>(
-            _system.Spacing(i), x - _system.Node(i), _y[i], _y[i + 1], _ypp[i],
-            _ypp[i + 1]);
+            _system.Spacing(i), reduced - _system.Node(i), _y[i], _y[i + 1],
+            _ypp[i], _ypp[i + 1]);
     }
 
     /** @brief Evaluate the spline; the same as `Evaluate<0>`. */
@@ -138,10 +147,24 @@ class CubicSpline {
     /** @brief Abscissa of node `i`. */
     Real Node(std::size_t i) const { return _system.Node(i); }
 
-    /** @brief Index of the segment used to evaluate `x`. */
+    /**
+     * @brief Index of the segment used to evaluate `x`.
+     *
+     * For a periodic spline this is the segment of the reduced query.
+     */
     std::size_t Segment(Real x) const {
-        return Detail::LocateSegment(_system.Nodes(), x);
+        return Detail::LocateSegment(_system.Nodes(), Reduce(x));
     }
+
+    /**
+     * @brief The period, `x_n - x_0`, when the condition is Periodic; empty
+     * otherwise.
+     *
+     * Primitive() reads it, so that an antiderivative carries on past the
+     * period by whole-period integrals rather than by continuing an edge
+     * cubic the spline itself no longer uses.
+     */
+    std::optional<Real> Period() const { return _system.Period(); }
 
     /**
      * @brief The factorised system behind this spline.
@@ -199,19 +222,25 @@ class CubicSpline {
     YView _y;
     std::vector<Scalar> _ypp; // Second derivatives at the nodes.
 
+    // The query a periodic spline actually answers; any other is unchanged.
+    Real Reduce(Real x) const {
+        if (const auto period = _system.Period()) {
+            return Detail::ReduceToPeriod(x, _system.Node(0), *period).reduced;
+        }
+        return x;
+    }
+
     // Validate the sample pair before the system sees the abscissae on their
     // own, so that a length mismatch and a bad grid are both reported against
     // this class rather than against the system it delegates to.
     static XView Checked(XView x, const YView &y, BoundaryCondition left,
                          BoundaryCondition right) {
-        const auto notAKnot = left == BoundaryCondition::NotAKnot;
-        if (notAKnot != (right == BoundaryCondition::NotAKnot)) {
-            throw std::invalid_argument(
-                "CubicSpline: NotAKnot constrains the whole system rather "
-                "than one endpoint, so it must be used at both ends or "
-                "neither");
+        Detail::ValidateSamples(
+            x, y, Detail::SplineConditionMinimum(left, right, "CubicSpline"),
+            "CubicSpline");
+        if (left == BoundaryCondition::Periodic) {
+            Detail::CheckPeriodicClosure(y, "CubicSpline");
         }
-        Detail::ValidateSamples(x, y, notAKnot ? 4 : 2, "CubicSpline");
         return x;
     }
 };

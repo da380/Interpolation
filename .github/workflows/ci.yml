@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main, develop, refactor]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -153,13 +154,28 @@ jobs:
             -DINTERPOLATION_BUILD_EXAMPLES=OFF
           cmake --install build
 
+      # The consumer asks for the version the project declares, read back from
+      # the configure rather than written here, so that a version bump cannot
+      # leave this job behind. A release tag must name that same version, or a
+      # consumer pinning the tag gets a package reporting a different one.
+      - name: Read the project version
+        id: version
+        run: |
+          version=$(sed -n 's/^CMAKE_PROJECT_VERSION:STATIC=//p' build/CMakeCache.txt)
+          echo "Project version: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the project version $version in CMakeLists.txt."
+            exit 1
+          fi
+
       - name: Build a consumer against the install tree
         run: |
           mkdir -p consumer
           cat > consumer/CMakeLists.txt <<'CMAKE'
           cmake_minimum_required(VERSION 3.24)
           project(Consumer LANGUAGES CXX)
-          find_package(Interpolation 0.1 REQUIRED)
+          find_package(Interpolation ${{ steps.version.outputs.version }} REQUIRED)
           add_executable(consumer main.cpp)
           target_link_libraries(consumer PRIVATE Interpolation::Interpolation)
           CMAKE

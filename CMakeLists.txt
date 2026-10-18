@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(Interpolation
-        VERSION 0.1.0
+        VERSION 1.1.1
         DESCRIPTION "Header-only C++23 library for one-dimensional interpolation and polynomial arithmetic"
         HOMEPAGE_URL "https://github.com/da380/Interpolation"
         LANGUAGES CXX)

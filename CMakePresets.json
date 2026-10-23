@@ -96,7 +96,7 @@
       "name": "docs",
       "configurePreset": "docs",
       "targets": [
-        "InterpolationDocs"
+        "interpolation_docs"
       ]
     }
   ],

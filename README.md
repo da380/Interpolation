@@ -279,7 +279,7 @@ running one tells you immediately whether it did the right thing.
 
 ```sh
 cmake --preset gcc-14
-cmake --build --preset gcc-14 --target examples
+cmake --build --preset gcc-14 --target interpolation_examples
 ./build/gcc-14/examples/03-boundary-conditions
 ```
 
@@ -344,7 +344,7 @@ documentation is opt-in:
 
 ```sh
 cmake -S . -B build -DINTERPOLATION_BUILD_DOCS=ON
-cmake --build build --target InterpolationDocs
+cmake --build build --target interpolation_docs
 ```
 
 The generated API starts at `build/docs/html/index.html` and is not tracked by

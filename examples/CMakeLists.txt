@@ -17,10 +17,13 @@ set(INTERPOLATION_EXAMPLES
     12-periodic-and-clamped)
 
 foreach(example IN LISTS INTERPOLATION_EXAMPLES)
-  add_executable(${example} ${example}.cpp)
-  target_link_libraries(${example} PRIVATE Interpolation::Interpolation)
-  target_compile_options(${example} PRIVATE ${INTERPOLATION_WARNINGS})
+  set(target interpolation_${example})
+  add_executable(${target} ${example}.cpp)
+  set_target_properties(${target} PROPERTIES OUTPUT_NAME ${example})
+  target_link_libraries(${target} PRIVATE Interpolation::Interpolation)
+  target_compile_options(${target} PRIVATE ${INTERPOLATION_WARNINGS})
+  list(APPEND INTERPOLATION_EXAMPLE_TARGETS ${target})
 endforeach()
 
 # One target to build the lot.
-add_custom_target(examples DEPENDS ${INTERPOLATION_EXAMPLES})
+add_custom_target(interpolation_examples DEPENDS ${INTERPOLATION_EXAMPLE_TARGETS})

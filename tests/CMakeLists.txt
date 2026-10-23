@@ -11,7 +11,7 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-add_executable(Tests
+add_executable(interpolation_tests
                Tests.cpp
                TestAkima.cpp
                TestConcepts.cpp
@@ -28,8 +28,8 @@ add_executable(Tests
                TestBicubicConditions.cpp
                AllocationCounter.cpp)
 
-target_link_libraries(Tests PRIVATE Interpolation::Interpolation gtest_main)
-target_compile_options(Tests PRIVATE ${INTERPOLATION_WARNINGS})
+target_link_libraries(interpolation_tests PRIVATE Interpolation::Interpolation gtest_main)
+target_compile_options(interpolation_tests PRIVATE ${INTERPOLATION_WARNINGS})
 
 include(GoogleTest)
-gtest_discover_tests(Tests)
+gtest_discover_tests(interpolation_tests)

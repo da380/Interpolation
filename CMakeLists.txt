@@ -21,12 +21,23 @@ include(CMakePackageConfigHelpers)
 #
 # NumericConcepts is the library's only dependency: header-only, and used for
 # the Real / Complex / RealOrComplex vocabulary that the public concepts refine.
-# The pin is its first tagged release.
+#
+# The revision fetched is a cache variable whose default is main: the libraries
+# are one author's and move together, so on a development branch tracking main
+# is the point, and every library that fetches NumericConcepts asks for the
+# same revision, whichever of them declares it first. A release must name a
+# state that can be rebuilt, so the commit that tags a release sets this
+# default to the commit it was tested against, and the commit after it sets it
+# back to main. From outside: cmake -DINTERPOLATION_NUMERICCONCEPTS_TAG=<commit>
 #
 # The package registry is excluded so that this never resolves from an
 # unrelated sibling project's build tree, which would make local builds depend
 # on directories outside this repository and diverge from CI.
 # ---------------------------------------------------------------------------
+set(INTERPOLATION_NUMERICCONCEPTS_TAG main CACHE STRING
+    "The NumericConcepts revision to fetch if none is installed")
+mark_as_advanced(INTERPOLATION_NUMERICCONCEPTS_TAG)
+
 find_package(NumericConcepts QUIET
              NO_CMAKE_PACKAGE_REGISTRY
              NO_CMAKE_SYSTEM_PACKAGE_REGISTRY)
@@ -36,7 +47,7 @@ if(NOT NumericConcepts_FOUND)
   FetchContent_Declare(
     NumericConcepts
     GIT_REPOSITORY https://github.com/da380/NumericConcepts.git
-    GIT_TAG v0.1.0
+    GIT_TAG ${INTERPOLATION_NUMERICCONCEPTS_TAG}
     SYSTEM)
   FetchContent_MakeAvailable(NumericConcepts)
 endif()
@@ -87,6 +98,9 @@ install(FILES
 
 # ---------------------------------------------------------------------------
 # Developer targets, only when this is the top-level project
+#
+# Every target here is prefixed interpolation_, so that none can collide with a
+# target of a project that consumes this one; the programs keep their names.
 # ---------------------------------------------------------------------------
 if(PROJECT_IS_TOP_LEVEL)
   option(INTERPOLATION_BUILD_EXAMPLES "Build the example programs" ON)
@@ -129,7 +143,7 @@ if(PROJECT_IS_TOP_LEVEL)
     find_package(Doxygen REQUIRED)
     set(INTERPOLATION_DOXYGEN_CONFIG ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile)
     configure_file(docs/Doxyfile.in ${INTERPOLATION_DOXYGEN_CONFIG} @ONLY)
-    add_custom_target(InterpolationDocs
+    add_custom_target(interpolation_docs
       COMMAND ${DOXYGEN_EXECUTABLE} ${INTERPOLATION_DOXYGEN_CONFIG}
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       COMMENT "Generating Interpolation API documentation"

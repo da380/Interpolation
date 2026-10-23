@@ -32,7 +32,7 @@ warning policy.
 
 ```sh
 cmake -S . -B build -DINTERPOLATION_BUILD_DOCS=ON
-cmake --build build --target InterpolationDocs
+cmake --build build --target interpolation_docs
 ```
 
 Doxygen is required only when `INTERPOLATION_BUILD_DOCS` is enabled. Graphviz is
@@ -64,7 +64,7 @@ grid:
 
 ```sh
 cmake -S . -B build -DINTERPOLATION_BUILD_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build --target InterpolationBenchmarks
+cmake --build build --target interpolation_benchmarks
 ./build/benchmarks/InterpolationBenchmarks
 ```
 

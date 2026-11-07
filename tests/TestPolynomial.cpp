@@ -171,8 +171,8 @@ TEST(Polynomial, CopyMoveAndCrossTypeAssignment) {
 }
 
 TEST(Polynomial, DegreeIsHonestAfterCancellation) {
-    // Before trimming, a subtraction that cancels the leading terms left the
-    // polynomial claiming a degree it no longer had.
+    // Without trimming, a subtraction that cancels the leading terms would
+    // leave the polynomial claiming a degree it no longer has.
     const Interpolation::Polynomial<double> a{1.0, 2.0, 3.0};
     const Interpolation::Polynomial<double> b{0.0, 0.0, 3.0};
 

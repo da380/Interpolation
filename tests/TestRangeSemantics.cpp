@@ -10,8 +10,8 @@
 namespace {
 
 // Builds an interpolator from containers that go out of scope on return.
-// Under the previous iterator-based API this returned three dangling
-// iterators; taking rvalue ranges by value makes it well defined.
+// Under an iterator-based API this would return three dangling iterators;
+// taking rvalue ranges by value makes it well defined.
 template <typename Interpolator>
 Interpolator
 MakeOwning() {

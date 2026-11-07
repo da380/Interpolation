@@ -1,10 +1,9 @@
-// Measures the two algorithmic changes made in phase 2 against the
-// implementations they replaced, so the speedups are numbers rather than
-// complexity arguments.
+// Measures the library's algorithms against the direct implementations they
+// replace, so the speedups are numbers rather than complexity arguments.
 //
 // The reference implementations below are deliberate reconstructions of the
-// old code: Lagrange evaluated straight from the product definition, and the
-// spline system solved densely with pivoting. They exist only here.
+// direct forms: Lagrange evaluated straight from the product definition, and
+// the spline system solved densely with pivoting. They exist only here.
 //
 // This is a hand-run harness, not a statistical one. It reports the best of
 // several repetitions, which is the least noisy simple summary on a busy
@@ -46,7 +45,7 @@ BestOf(int repetitions, F &&f) {
     return best;
 }
 
-// The Lagrange evaluation this replaced: O(n) per basis function and O(n^2)
+// The direct Lagrange evaluation: O(n) per basis function and O(n^2)
 // per basis derivative, recomputing the denominators on every call.
 double
 NaiveLagrange(const std::vector<double> &x, const std::vector<double> &y,
@@ -92,8 +91,8 @@ NaiveLagrangeDerivative(const std::vector<double> &x,
     return total;
 }
 
-// A dense solve with partial pivoting, standing in for the sparse
-// factorisation the spline used before: O(n^3) against the Thomas O(n).
+// A dense solve with partial pivoting, standing in for a general
+// factorisation of the spline system: O(n^3) against the Thomas O(n).
 std::vector<double>
 DenseSolveSplineSystem(const std::vector<double> &x,
                        const std::vector<double> &y) {
@@ -239,7 +238,7 @@ main() {
         Row("Lagrange value", n, before, after, worst);
     }
 
-    // Lagrange differentiation, where the old form was cubic.
+    // Lagrange differentiation, where the direct form is cubic.
     for (const std::size_t n : {16u, 32u, 64u}) {
         const auto [x, y] = MakeSamples(n, 20260821ull);
         const Interpolation::Lagrange interpolant{x, y};

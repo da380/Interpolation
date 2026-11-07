@@ -42,8 +42,8 @@ second derivatives `M_i = S''(x_i)`.
   not-a-knot it applies at both ends and needs at least four nodes, counting
   the closing one; it has its own section below.
 
-The three-argument constructor is Free/Free, commonly called a natural spline.
-Mixed Free/Clamped combinations are supported. The implementation assembles the
+The two-argument constructor is Natural/Natural, commonly called a natural
+spline. Mixed Natural/Clamped combinations are supported. The implementation assembles the
 tridiagonal system for the nodal second derivatives and solves it with the
 Thomas algorithm, without pivoting, which is safe because the system is
 strictly diagonally dominant.
@@ -241,7 +241,7 @@ partial Bell polynomial form, built by the recurrence
 over set partitions. Both gather the operands' derivatives once and run a
 small table over them, so neither allocates.
 
-The one remaining ceiling is `Lagrange`, which evaluates only the value and
+The one ceiling is `Lagrange`, which evaluates only the value and
 first derivative and refuses to compile above that rather than returning a
 plausible wrong number.
 
@@ -250,7 +250,7 @@ its nodes and a per-segment integral, and `Primitive` accumulates the
 cumulative integral once when the node is built, so an interpolator carries no
 antiderivative state unless one is asked for. A function with a closed-form
 antiderivative, such as `Polynomial`, provides it directly. `Lagrange` supports
-neither yet: it is a single global polynomial rather than a piecewise one.
+neither: it is a single global polynomial rather than a piecewise one.
 
 ## Two dimensions
 

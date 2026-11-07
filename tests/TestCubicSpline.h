@@ -81,8 +81,7 @@ namespace CubicSplineTest {
 // fact that its system is tridiagonal and solves it by the Thomas algorithm
 // without pivoting; this reference ignores the structure entirely and pivots,
 // so agreement between the two is real evidence rather than the same code run
-// twice. It previously called Eigen's fullPivLu, and was replaced in kind when
-// the Eigen dependency was removed.
+// twice.
 template <typename y_value_t>
 std::vector<y_value_t>
 SolveDense(std::vector<std::vector<y_value_t>> a, std::vector<y_value_t> b) {

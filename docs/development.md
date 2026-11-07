@@ -56,9 +56,9 @@ tree.
 
 ## Benchmarks
 
-The algorithmic changes made here have a harness that measures them against
-the implementations they replaced, rather than resting on complexity
-arguments. It covers barycentric `Lagrange`, the tridiagonal spline solve, and
+A harness measures the library's algorithms against the direct
+implementations they replace, rather than resting on complexity arguments.
+It covers barycentric `Lagrange`, the tridiagonal spline solve, and
 the shared-factorisation path for a nodal derivative over many lines on one
 grid:
 

@@ -22,12 +22,12 @@ Interpolation is header-only and has no external dependencies. Link the CMake
 interface target `Interpolation::Interpolation` so the include directory and
 the C++ standard are supplied consistently.
 
-## Add Interp to a project
+## Add Interpolation to a project
 
 For a sibling checkout:
 
 ```cmake
-add_subdirectory(path/to/Interp)
+add_subdirectory(path/to/Interpolation)
 target_link_libraries(my_target PRIVATE Interpolation)
 ```
 
@@ -43,7 +43,7 @@ Every interpolator takes ranges, and what it does with them follows from the
 value category of the argument:
 
 - an **lvalue** container is **borrowed**. It must outlive the interpolator
-  and must not be reallocated, exactly as the old iterator-based API required;
+  and must not be reallocated;
 - an **rvalue** is **owned**. The data is moved in, so the interpolator can be
   returned from a function or stored beyond the lifetime of its source.
 
@@ -68,7 +68,7 @@ samples use a doubled abscissa to mark the jump.
 | Routine | Input precondition | Query behavior |
 | --- | --- | --- |
 | `Linear` | At least 2 nodes | Extrapolates with the first or final line segment |
-| `CubicSpline` | At least 2 nodes, or 4 for not-a-knot | Extrapolates with the first or final cubic segment |
+| `CubicSpline` | At least 2 nodes, or 4 for not-a-knot or periodic | Extrapolates with the first or final cubic segment |
 | `AkimaSpline` | At least 3 nodes | Extrapolates with the first or final cubic segment |
 | `Lagrange` | At least 1 node | Evaluates the global polynomial for any real query |
 | `LagrangeBasis` | At least 1 node | Evaluates the selected basis polynomial for any real query |
@@ -103,25 +103,7 @@ type convert each coefficient and replace the destination coefficient list.
 
 ## Boundary-condition constructors
 
-The three-argument `CubicSpline` constructor selects Free conditions at both
-ends. A six-argument overload applies one condition type to both endpoints,
-while the full seven-argument overload selects each endpoint independently.
-Derivative values passed for Free endpoints are ignored.
-
-## Coming from the iterator-based API
-
-Earlier versions took iterators and spelled several names differently. Code
-written against them migrates by this table; construction changes from three
-iterators to two ranges, as described above.
-
-| Was | Becomes | Why |
-| --- | --- | --- |
-| `Polynomial1D` | `Polynomial` | Dimension lives in the namespace, not the name |
-| `Akima` | `AkimaSpline` | Class name matched neither its header nor its siblings |
-| `LagrangePolynomial` | `LagrangeBasis` | It is the cardinal basis, not a polynomial |
-| `CubicSplineBC::Free` | `BoundaryCondition::Natural` | The docs already glossed Free as "natural" |
-| `x_value_type`, `value_t` | `Real` | One vocabulary across the library |
-| `y_value_type` | `Scalar` | Real or complex ordinate |
-| `.Derivative(x)` | `.Evaluate<1>(x)` | `Derivative(f)` is now a free function on functions |
-| `<Interpolation/All>` | `<Interpolation/Interpolation.hpp>` | Extensionless headers confuse tooling |
-| `.deriv()`, `.Primative()` | removed | Already deprecated forwarding aliases |
+The two-argument `CubicSpline` constructor selects Natural conditions at both
+ends. A five-argument overload applies one condition type to both endpoints,
+while the full six-argument overload selects each endpoint independently.
+Derivative values passed for an endpoint that is not Clamped are ignored.
